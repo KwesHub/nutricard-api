@@ -11,6 +11,9 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
@@ -29,30 +32,46 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        Food sardines = new Food();
-        sardines.setName("Sardines");
-        sardines.setCategory("FISH");
-        sardines.setFoodRole(FoodRole.WEEKLY_ANCHOR);
-        sardines.setServingSizeG(100);
-        sardines = foodRepository.save(sardines);
+        List<Food> foods = new ArrayList<>();
+        foods.add(createFood("Sardines", "FISH", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Oats", "GRAIN", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Garlic", "VEGETABLE", FoodRole.PANTRY, 10));
+        foods.add(createFood("Eggs", "PROTEIN", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Chicken breast", "PROTEIN", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Beef mince 10%", "PROTEIN", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Sweet potato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Brown rice", "GRAIN", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("White rice", "GRAIN", FoodRole.PANTRY, 100));
+        foods.add(createFood("Pearl barley", "GRAIN", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Whole-wheat spaghetti", "GRAIN", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Red lentils", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Green lentils", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Red kidney beans", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Peas", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Spinach", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Apple", "FRUIT", FoodRole.BOOSTER, 100));
+        foods.add(createFood("Banana", "FRUIT", FoodRole.BOOSTER, 100));
+        foods.add(createFood("Kiwi", "FRUIT", FoodRole.BOOSTER, 100));
+        foods.add(createFood("Blueberries", "FRUIT", FoodRole.BOOSTER, 100));
+        foods.add(createFood("Ginger", "VEGETABLE", FoodRole.BOOSTER, 10));
+        foods.add(createFood("Honey", "OTHER", FoodRole.OCCASIONAL, 20));
+        foods.add(createFood("Peanut butter", "OTHER", FoodRole.WEEKLY_ANCHOR, 30));
+        foods.add(createFood("Tahini", "OTHER", FoodRole.PANTRY, 15));
+        foods.add(createFood("Olive oil", "OTHER", FoodRole.PANTRY, 15));
+        foods.add(createFood("Dark chocolate 70%", "OTHER", FoodRole.OCCASIONAL, 30));
 
-        Food oats = new Food();
-        oats.setName("Oats");
-        oats.setCategory("GRAIN");
-        oats.setFoodRole(FoodRole.DAILY_DRIVER);
-        oats.setServingSizeG(100);
-        oats = foodRepository.save(oats);
-
-        Food garlic = new Food();
-        garlic.setName("Garlic");
-        garlic.setCategory("VEGETABLE");
-        garlic.setFoodRole(FoodRole.PANTRY);
-        garlic.setServingSizeG(10);
-        garlic = foodRepository.save(garlic);
-
-        for (Food food : new Food[]{sardines, oats, garlic}) {
+        for (Food food : foods) {
             NutritionScore score = scoringService.calculateScores(food);
             nutritionScoreRepository.save(score);
         }
+    }
+
+    private Food createFood(String name, String category, FoodRole role, int servingSizeG) {
+        Food food = new Food();
+        food.setName(name);
+        food.setCategory(category);
+        food.setFoodRole(role);
+        food.setServingSizeG(servingSizeG);
+        return foodRepository.save(food);
     }
 }
