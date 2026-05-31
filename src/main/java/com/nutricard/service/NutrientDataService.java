@@ -12,10 +12,33 @@ public class NutrientDataService {
 
     private static final String BASE_URL = "https://api.nal.usda.gov";
 
-    private static final Map<String, Integer> FDC_ID_MAP = Map.of(
-            "Sardines", 175139,
-            "Oats", 173904,
-            "Garlic", 169230
+    private static final Map<String, Integer> FDC_ID_MAP = Map.ofEntries(
+            Map.entry("Sardines", 175139),
+            Map.entry("Oats", 173904),
+            Map.entry("Garlic", 169230),
+            Map.entry("Eggs", 171287),
+            Map.entry("Chicken breast", 171477),
+            Map.entry("Beef mince 10%", 174036),
+            Map.entry("Sweet potato", 168482),
+            Map.entry("Brown rice", 169704),
+            Map.entry("White rice", 169756),
+            Map.entry("Pearl barley", 170283),
+            Map.entry("Whole-wheat spaghetti", 170285),
+            Map.entry("Red lentils", 172421),
+            Map.entry("Green lentils", 172420),
+            Map.entry("Red kidney beans", 175200),
+            Map.entry("Peas", 170420),
+            Map.entry("Spinach", 168462),
+            Map.entry("Apple", 171688),
+            Map.entry("Banana", 173944),
+            Map.entry("Kiwi", 168153),
+            Map.entry("Blueberries", 171711),
+            Map.entry("Ginger", 169231),
+            Map.entry("Honey", 169640),
+            Map.entry("Peanut butter", 172470),
+            Map.entry("Tahini", 168604),
+            Map.entry("Olive oil", 171413),
+            Map.entry("Dark chocolate 70%", 169593)
     );
 
     private static final String[] VITAMINS = {
