@@ -7,10 +7,7 @@ import com.nutricard.repository.FoodRepository;
 import com.nutricard.repository.NutritionScoreRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -23,7 +20,10 @@ public class FoodController {
     private final NutritionScoreRepository nutritionScoreRepository;
 
     @GetMapping
-    public List<Food> getAllFoods() {
+    public List<Food> getAllFoods(@RequestParam(required = false) String search) {
+        if (search != null && !search.isBlank()) {
+            return foodRepository.findByNameContainingIgnoreCase(search);
+        }
         return foodRepository.findAll();
     }
 
