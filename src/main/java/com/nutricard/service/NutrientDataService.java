@@ -41,15 +41,6 @@ public class NutrientDataService {
             Map.entry("Dark chocolate 70%", 169593)
     );
 
-    private static final String[] VITAMINS = {
-            "Vitamin A, RAE", "Vitamin C, total ascorbic acid", "Vitamin D (D2 + D3)",
-            "Vitamin E (alpha-tocopherol)", "Vitamin K (phylloquinone)", "Vitamin B-12", "Folate, total"
-    };
-
-    private static final String[] MINERALS = {
-            "Iron, Fe", "Zinc, Zn", "Magnesium, Mg",
-            "Calcium, Ca", "Potassium, K", "Selenium, Se"
-    };
 
     private final WebClient webClient;
     private final String apiKey;
@@ -92,7 +83,7 @@ public class NutrientDataService {
                 return null;
             }
 
-            return extractNutrientData(foodNutrients, "nutrient", "name", "amount");
+            return extractNutrientData(foodName, foodNutrients, "nutrient", "name", "amount");
 
         } catch (Exception e) {
             System.err.println("Failed to fetch nutrient data by FDC ID for '" + foodName + "': " + e.getMessage());
@@ -128,7 +119,7 @@ public class NutrientDataService {
                 return null;
             }
 
-            return extractNutrientData(foodNutrients, null, "nutrientName", "value");
+            return extractNutrientData(foodName, foodNutrients, null, "nutrientName", "value");
 
         } catch (Exception e) {
             System.err.println("Failed to fetch nutrient data for '" + foodName + "': " + e.getMessage());
@@ -136,18 +127,75 @@ public class NutrientDataService {
         }
     }
 
-    private NutrientData extractNutrientData(JsonNode foodNutrients, String nutrientObj, String nameField, String valueField) {
+    private NutrientData extractNutrientData(String foodName, JsonNode foodNutrients, String nutrientObj, String nameField, String valueField) {
         double proteins = getNutrientValue(foodNutrients, "Protein", nutrientObj, nameField, valueField);
         double fiber = getNutrientValue(foodNutrients, "Fiber, total dietary", nutrientObj, nameField, valueField);
         double energyKcal = getNutrientValue(foodNutrients, "Energy", nutrientObj, nameField, valueField);
         double fat = getNutrientValue(foodNutrients, "Total lipid (fat)", nutrientObj, nameField, valueField);
         double saturatedFat = getNutrientValue(foodNutrients, "Fatty acids, total saturated", nutrientObj, nameField, valueField);
         double omega3 = getNutrientValue(foodNutrients, "Fatty acids, total polyunsaturated", nutrientObj, nameField, valueField);
+        double sugars = getNutrientValue(foodNutrients, "Sugars, total including NLEA", nutrientObj, nameField, valueField);
+        if (sugars == 0.0) sugars = getNutrientValue(foodNutrients, "Sugars, total", nutrientObj, nameField, valueField);
+        if (sugars == 0.0) sugars = getNutrientValue(foodNutrients, "Total Sugars", nutrientObj, nameField, valueField);
+        double mono = getNutrientValue(foodNutrients, "Fatty acids, total monounsaturated", nutrientObj, nameField, valueField);
+        double poly = getNutrientValue(foodNutrients, "Fatty acids, total polyunsaturated", nutrientObj, nameField, valueField);
 
-        int vitaminCount = countPresent(foodNutrients, VITAMINS, nutrientObj, nameField, valueField);
-        int mineralCount = countPresent(foodNutrients, MINERALS, nutrientObj, nameField, valueField);
+        double vitaminA = getNutrientValue(foodNutrients, "Vitamin A, RAE", nutrientObj, nameField, valueField);
+        double vitaminC = getNutrientValue(foodNutrients, "Vitamin C, total ascorbic acid", nutrientObj, nameField, valueField);
+        double vitaminD = getNutrientValue(foodNutrients, "Vitamin D (D2 + D3)", nutrientObj, nameField, valueField);
+        double vitaminE = getNutrientValue(foodNutrients, "Vitamin E (alpha-tocopherol)", nutrientObj, nameField, valueField);
+        double vitaminK = getNutrientValue(foodNutrients, "Vitamin K (phylloquinone)", nutrientObj, nameField, valueField);
+        double vitaminB1 = getNutrientValue(foodNutrients, "Thiamin", nutrientObj, nameField, valueField);
+        double vitaminB2 = getNutrientValue(foodNutrients, "Riboflavin", nutrientObj, nameField, valueField);
+        double vitaminB3 = getNutrientValue(foodNutrients, "Niacin", nutrientObj, nameField, valueField);
+        double vitaminB6 = getNutrientValue(foodNutrients, "Vitamin B-6", nutrientObj, nameField, valueField);
+        double vitaminB12 = getNutrientValue(foodNutrients, "Vitamin B-12", nutrientObj, nameField, valueField);
+        double folate = getNutrientValue(foodNutrients, "Folate, total", nutrientObj, nameField, valueField);
 
-        return new NutrientData(proteins, fiber, energyKcal, fat, saturatedFat, omega3, vitaminCount, mineralCount);
+        double calcium = getNutrientValue(foodNutrients, "Calcium, Ca", nutrientObj, nameField, valueField);
+        double iron = getNutrientValue(foodNutrients, "Iron, Fe", nutrientObj, nameField, valueField);
+        double magnesium = getNutrientValue(foodNutrients, "Magnesium, Mg", nutrientObj, nameField, valueField);
+        double phosphorus = getNutrientValue(foodNutrients, "Phosphorus, P", nutrientObj, nameField, valueField);
+        double potassium = getNutrientValue(foodNutrients, "Potassium, K", nutrientObj, nameField, valueField);
+        double zinc = getNutrientValue(foodNutrients, "Zinc, Zn", nutrientObj, nameField, valueField);
+        double selenium = getNutrientValue(foodNutrients, "Selenium, Se", nutrientObj, nameField, valueField);
+        double copper = getNutrientValue(foodNutrients, "Copper, Cu", nutrientObj, nameField, valueField);
+
+        System.out.println("=== NUTRIENT DEBUG for " + foodName + " ===");
+        System.out.println("Protein: " + proteins);
+        System.out.println("Fiber: " + fiber);
+        System.out.println("Energy: " + energyKcal);
+        System.out.println("Sugars: " + sugars);
+        System.out.println("Fat: " + fat);
+        System.out.println("Saturated fat: " + saturatedFat);
+        System.out.println("Mono fat: " + mono);
+        System.out.println("Poly fat: " + poly);
+        System.out.println("Vitamin A: " + vitaminA);
+        System.out.println("Vitamin C: " + vitaminC);
+        System.out.println("Vitamin D: " + vitaminD);
+        System.out.println("Vitamin E: " + vitaminE);
+        System.out.println("Vitamin K: " + vitaminK);
+        System.out.println("B1: " + vitaminB1);
+        System.out.println("B2: " + vitaminB2);
+        System.out.println("B3: " + vitaminB3);
+        System.out.println("B6: " + vitaminB6);
+        System.out.println("B12: " + vitaminB12);
+        System.out.println("Folate: " + folate);
+        System.out.println("Calcium: " + calcium);
+        System.out.println("Iron: " + iron);
+        System.out.println("Magnesium: " + magnesium);
+        System.out.println("Phosphorus: " + phosphorus);
+        System.out.println("Potassium: " + potassium);
+        System.out.println("Zinc: " + zinc);
+        System.out.println("Selenium: " + selenium);
+        System.out.println("Copper: " + copper);
+        System.out.println("=== END DEBUG ===");
+
+        return new NutrientData(proteins, fiber, energyKcal, fat, saturatedFat, omega3,
+                sugars, mono, poly,
+                vitaminA, vitaminC, vitaminD, vitaminE, vitaminK,
+                vitaminB1, vitaminB2, vitaminB3, vitaminB6, vitaminB12, folate,
+                calcium, iron, magnesium, phosphorus, potassium, zinc, selenium, copper);
     }
 
     private double getNutrientValue(JsonNode foodNutrients, String nutrientName,
@@ -167,18 +215,6 @@ public class NutrientDataService {
         return 0.0;
     }
 
-    private int countPresent(JsonNode foodNutrients, String[] nutrientNames,
-                              String nutrientObj, String nameField, String valueField) {
-        int count = 0;
-        for (String name : nutrientNames) {
-            double value = getNutrientValue(foodNutrients, name, nutrientObj, nameField, valueField);
-            if (value > 0) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     public record NutrientData(
             double proteins100g,
             double fiber100g,
@@ -186,7 +222,27 @@ public class NutrientDataService {
             double fat100g,
             double saturatedFat100g,
             double omega3Fat100g,
-            int vitaminCount,
-            int mineralCount
+            double sugars100g,
+            double monounsaturatedFat100g,
+            double polyunsaturatedFat100g,
+            double vitaminA,
+            double vitaminC,
+            double vitaminD,
+            double vitaminE,
+            double vitaminK,
+            double vitaminB1,
+            double vitaminB2,
+            double vitaminB3,
+            double vitaminB6,
+            double vitaminB12,
+            double folate,
+            double calcium,
+            double iron,
+            double magnesium,
+            double phosphorus,
+            double potassium,
+            double zinc,
+            double selenium,
+            double copper
     ) {}
 }
