@@ -33,4 +33,23 @@ public class NutritionScore {
     private Double bioavailabilityModifier;
 
     private Double overallScore;
+
+    private Double synergyPotential;
+
+    private Double energyProfileNeutral;
+
+    @Column(columnDefinition = "TEXT")
+    private String timingScores;
+
+    @Column(columnDefinition = "TEXT")
+    private String proteinBreakdown;
+
+    @Column(columnDefinition = "TEXT")
+    private String energyBreakdown;
+
+    @Column(columnDefinition = "TEXT")
+    private String gutBreakdown;
+
+    @Column(columnDefinition = "TEXT")
+    private String microBreakdown;
 }
