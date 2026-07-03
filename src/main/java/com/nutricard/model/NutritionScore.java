@@ -32,6 +32,8 @@ public class NutritionScore {
 
     private Double bioavailabilityModifier;
 
+    private Double kcalPer100g;
+
     private Double overallScore;
 
     private Double synergyPotential;
