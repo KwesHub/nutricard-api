@@ -50,6 +50,7 @@ public class FoodService {
         return new FoodCardResponse(food, score);
     }
 
+    @Transactional
     public CompareResponse compare(Long a, Long b) {
         Food foodA = foodRepository.findById(a)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -59,11 +60,9 @@ public class FoodService {
                         "Food with ID " + b + " not found"));
 
         NutritionScore scoreA = nutritionScoreRepository.findByFoodId(a)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "NutritionScore missing for food " + a));
+                .orElseGet(() -> nutritionScoreRepository.save(scoringService.calculateScores(foodA)));
         NutritionScore scoreB = nutritionScoreRepository.findByFoodId(b)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "NutritionScore missing for food " + b));
+                .orElseGet(() -> nutritionScoreRepository.save(scoringService.calculateScores(foodB)));
 
         Map<String, String> winners = new LinkedHashMap<>();
         winners.put("proteinQuality", pickWinner(scoreA.getProteinQuality(), scoreB.getProteinQuality(), foodA.getName(), foodB.getName()));
