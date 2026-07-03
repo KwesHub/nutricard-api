@@ -15,6 +15,7 @@ public class MealScoringService {
 
     private final MealFoodRepository mealFoodRepository;
     private final NutritionScoreRepository nutritionScoreRepository;
+    private final ScoringService scoringService;
 
     public MealScore calculateMealScore(Meal meal) {
         List<MealFood> mealFoods = mealFoodRepository.findByMealId(meal.getId());
@@ -31,8 +32,10 @@ public class MealScoringService {
 
         for (MealFood mealFood : mealFoods) {
             NutritionScore ns = nutritionScoreRepository.findByFoodId(mealFood.getFood().getId())
-                    .orElse(null);
-            if (ns == null) continue;
+                    .orElseGet(() -> {
+                        NutritionScore computed = scoringService.calculateScores(mealFood.getFood());
+                        return nutritionScoreRepository.save(computed);
+                    });
 
             double weight = mealFood.getQuantityG() / totalWeight;
             weightedProtein += ns.getProteinQuality() * weight;
@@ -86,12 +89,20 @@ public class MealScoringService {
                 .map(mf -> mf.getFood().getName())
                 .toList();
 
-        boolean hasOmega3Fish = foodNames.stream().anyMatch(n -> n.equals("Sardines") || n.equals("Mackerel"));
+        boolean hasOmega3Fish = foodNames.stream().anyMatch(n ->
+                n.equals("Sardines") || n.equals("Mackerel") || n.equals("Salmon"));
         boolean hasAllium = foodNames.stream().anyMatch(n -> n.equals("Garlic") || n.equals("Onion"));
         boolean hasOats = foodNames.contains("Oats");
-        boolean hasVitC = foodNames.stream().anyMatch(n -> n.equals("Kiwi") || n.equals("Lemon") || n.equals("Orange"));
+        boolean hasVitC = foodNames.stream().anyMatch(n ->
+                n.equals("Kiwi") || n.equals("Lemon") || n.equals("Orange") ||
+                n.equals("Bell pepper") || n.equals("Broccoli") || n.equals("Tomato"));
         boolean hasSpinach = foodNames.contains("Spinach");
-        boolean hasVitCForIron = foodNames.stream().anyMatch(n -> n.equals("Lemon") || n.equals("Kiwi"));
+        boolean hasVitCForIron = foodNames.stream().anyMatch(n ->
+                n.equals("Lemon") || n.equals("Kiwi") || n.equals("Bell pepper") || n.equals("Broccoli"));
+        boolean hasTomato = foodNames.contains("Tomato");
+        boolean hasDietaryFat = foodNames.stream().anyMatch(n ->
+                n.equals("Olive oil") || n.equals("Avocado") || n.equals("Salmon") ||
+                n.equals("Sardines") || n.equals("Walnuts") || n.equals("Flaxseed") || n.equals("Chia seeds"));
 
         if (hasOmega3Fish && hasAllium) {
             synergies.add("Omega-3 + Allicin: anti-inflammatory combination");
@@ -105,10 +116,14 @@ public class MealScoringService {
             synergies.add("Vitamin C improves iron absorption from spinach");
         }
 
+        if (hasTomato && hasDietaryFat) {
+            synergies.add("Fat + Lycopene: dietary fat increases lycopene absorption from tomato by up to 4x");
+        }
+
         boolean hasHighProtein = foodsWithScores.stream()
                 .anyMatch(fs -> fs.score().getProteinQuality() > 60);
         boolean hasHighGut = foodsWithScores.stream()
-                .anyMatch(fs -> fs.score().getGutHealth() > 60);
+                .anyMatch(fs -> fs.score().getGutHealth() > 35);
         if (hasHighProtein && hasHighGut) {
             synergies.add("Protein + Fibre: sustained energy and satiety");
         }

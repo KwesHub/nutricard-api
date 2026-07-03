@@ -1,16 +1,38 @@
 package com.nutricard.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
 import java.util.Map;
 
 @Service
 public class NutrientDataService {
 
+    private static final Logger log = LoggerFactory.getLogger(NutrientDataService.class);
     private static final String BASE_URL = "https://api.nal.usda.gov";
+
+    private static final int NUTRIENT_ID_CHOLINE = 1180;
+    private static final int NUTRIENT_ID_PANTOTHENIC_ACID = 1170;
+    private static final int NUTRIENT_ID_BIOTIN = 1176;
+    private static final int NUTRIENT_ID_MANGANESE = 1101;
+    private static final int NUTRIENT_ID_IODINE = 1100;
+    private static final int NUTRIENT_ID_EPA = 1278;
+    private static final int NUTRIENT_ID_DHA = 1272;
+
+    // FDC 172420 ("Lentils, green, whole, raw") is a dry/raw weight entry — protein (~24g),
+    // calories (~352 kcal) and fiber (~31g) per 100g are all inflated vs cooked values.
+    // Corrections below are applied after the USDA fetch so the full scoring pipeline
+    // (protein quality, energy, gut health, calorie display) sees the correct cooked values.
+    private record CookedCorrection(double proteinG, double energyKcal, double fiberG) {}
+
+    private static final Map<String, CookedCorrection> COOKED_CORRECTIONS = Map.of(
+            "Green lentils", new CookedCorrection(9.02, 116.0, 7.9)
+    );
 
     private static final Map<String, Integer> FDC_ID_MAP = Map.ofEntries(
             Map.entry("Sardines", 175139),
@@ -20,10 +42,10 @@ public class NutrientDataService {
             Map.entry("Chicken breast", 171477),
             Map.entry("Beef mince 10%", 174036),
             Map.entry("Sweet potato", 168482),
-            Map.entry("Brown rice", 169704),
+            Map.entry("Brown rice", 169703),
             Map.entry("White rice", 169756),
             Map.entry("Pearl barley", 170283),
-            Map.entry("Whole-wheat spaghetti", 170285),
+            Map.entry("Whole-wheat spaghetti", 169735),
             Map.entry("Red lentils", 172421),
             Map.entry("Green lentils", 172420),
             Map.entry("Red kidney beans", 175200),
@@ -38,7 +60,21 @@ public class NutrientDataService {
             Map.entry("Peanut butter", 172470),
             Map.entry("Tahini", 168604),
             Map.entry("Olive oil", 171413),
-            Map.entry("Dark chocolate 70%", 169593)
+            Map.entry("Dark chocolate 70%", 170273),
+            Map.entry("Salmon", 175168),
+            Map.entry("Greek yogurt", 171304),
+            Map.entry("Broccoli", 170379),
+            Map.entry("Avocado", 171705),
+            Map.entry("Quinoa", 168917),
+            Map.entry("Black beans", 173735),
+            Map.entry("Walnuts", 170187),
+            Map.entry("Cottage cheese", 173417),
+            Map.entry("Lemon", 168299),
+            Map.entry("Flaxseed", 169414),
+            Map.entry("Chia seeds", 170554),
+            Map.entry("Sweet corn", 169997),
+            Map.entry("Bell pepper", 170108),
+            Map.entry("Tomato", 170457)
     );
 
 
@@ -54,13 +90,30 @@ public class NutrientDataService {
 
     public NutrientData fetchNutrientData(String foodName) {
         Integer fdcId = FDC_ID_MAP.get(foodName);
+        NutrientData data = null;
         if (fdcId != null) {
-            NutrientData data = fetchByFdcId(fdcId, foodName);
-            if (data != null) {
-                return data;
-            }
+            data = fetchByFdcId(fdcId, foodName);
         }
-        return fetchBySearch(foodName);
+        if (data == null) {
+            data = fetchBySearch(foodName);
+        }
+        if (data != null && COOKED_CORRECTIONS.containsKey(foodName)) {
+            data = applyCookedCorrection(data, COOKED_CORRECTIONS.get(foodName));
+        }
+        return data;
+    }
+
+    private NutrientData applyCookedCorrection(NutrientData d, CookedCorrection c) {
+        return new NutrientData(
+                c.proteinG(), c.fiberG(), c.energyKcal(), d.fat100g(),
+                d.saturatedFat100g(), d.omega3Fat100g(), d.sugars100g(),
+                d.monounsaturatedFat100g(), d.polyunsaturatedFat100g(),
+                d.vitaminA(), d.vitaminC(), d.vitaminD(), d.vitaminE(), d.vitaminK(),
+                d.vitaminB1(), d.vitaminB2(), d.vitaminB3(), d.vitaminB6(), d.vitaminB12(),
+                d.folate(), d.calcium(), d.iron(), d.magnesium(), d.phosphorus(),
+                d.potassium(), d.zinc(), d.selenium(), d.copper(),
+                d.choline(), d.pantothenicAcid(), d.biotin(), d.manganese(),
+                d.iodine(), d.epa(), d.dha());
     }
 
     private NutrientData fetchByFdcId(int fdcId, String foodName) {
@@ -72,6 +125,7 @@ public class NutrientDataService {
                             .build())
                     .retrieve()
                     .bodyToMono(JsonNode.class)
+                    .timeout(Duration.ofSeconds(10))
                     .block();
 
             if (response == null) {
@@ -86,7 +140,7 @@ public class NutrientDataService {
             return extractNutrientData(foodName, foodNutrients, "nutrient", "name", "amount");
 
         } catch (Exception e) {
-            System.err.println("Failed to fetch nutrient data by FDC ID for '" + foodName + "': " + e.getMessage());
+            log.error("Failed to fetch nutrient data by FDC ID for '{}': {}", foodName, e.getMessage());
             return null;
         }
     }
@@ -103,6 +157,7 @@ public class NutrientDataService {
                             .build())
                     .retrieve()
                     .bodyToMono(JsonNode.class)
+                    .timeout(Duration.ofSeconds(10))
                     .block();
 
             if (response == null) {
@@ -122,7 +177,7 @@ public class NutrientDataService {
             return extractNutrientData(foodName, foodNutrients, null, "nutrientName", "value");
 
         } catch (Exception e) {
-            System.err.println("Failed to fetch nutrient data for '" + foodName + "': " + e.getMessage());
+            log.error("Failed to fetch nutrient data for '{}': {}", foodName, e.getMessage());
             return null;
         }
     }
@@ -161,41 +216,20 @@ public class NutrientDataService {
         double selenium = getNutrientValue(foodNutrients, "Selenium, Se", nutrientObj, nameField, valueField);
         double copper = getNutrientValue(foodNutrients, "Copper, Cu", nutrientObj, nameField, valueField);
 
-        System.out.println("=== NUTRIENT DEBUG for " + foodName + " ===");
-        System.out.println("Protein: " + proteins);
-        System.out.println("Fiber: " + fiber);
-        System.out.println("Energy: " + energyKcal);
-        System.out.println("Sugars: " + sugars);
-        System.out.println("Fat: " + fat);
-        System.out.println("Saturated fat: " + saturatedFat);
-        System.out.println("Mono fat: " + mono);
-        System.out.println("Poly fat: " + poly);
-        System.out.println("Vitamin A: " + vitaminA);
-        System.out.println("Vitamin C: " + vitaminC);
-        System.out.println("Vitamin D: " + vitaminD);
-        System.out.println("Vitamin E: " + vitaminE);
-        System.out.println("Vitamin K: " + vitaminK);
-        System.out.println("B1: " + vitaminB1);
-        System.out.println("B2: " + vitaminB2);
-        System.out.println("B3: " + vitaminB3);
-        System.out.println("B6: " + vitaminB6);
-        System.out.println("B12: " + vitaminB12);
-        System.out.println("Folate: " + folate);
-        System.out.println("Calcium: " + calcium);
-        System.out.println("Iron: " + iron);
-        System.out.println("Magnesium: " + magnesium);
-        System.out.println("Phosphorus: " + phosphorus);
-        System.out.println("Potassium: " + potassium);
-        System.out.println("Zinc: " + zinc);
-        System.out.println("Selenium: " + selenium);
-        System.out.println("Copper: " + copper);
-        System.out.println("=== END DEBUG ===");
+        double choline = getNutrientValueById(foodNutrients, NUTRIENT_ID_CHOLINE, nutrientObj, valueField);
+        double pantothenicAcid = getNutrientValueById(foodNutrients, NUTRIENT_ID_PANTOTHENIC_ACID, nutrientObj, valueField);
+        double biotin = getNutrientValueById(foodNutrients, NUTRIENT_ID_BIOTIN, nutrientObj, valueField);
+        double manganese = getNutrientValueById(foodNutrients, NUTRIENT_ID_MANGANESE, nutrientObj, valueField);
+        double iodine = getNutrientValueById(foodNutrients, NUTRIENT_ID_IODINE, nutrientObj, valueField);
+        double epa = getNutrientValueById(foodNutrients, NUTRIENT_ID_EPA, nutrientObj, valueField);
+        double dha = getNutrientValueById(foodNutrients, NUTRIENT_ID_DHA, nutrientObj, valueField);
 
         return new NutrientData(proteins, fiber, energyKcal, fat, saturatedFat, omega3,
                 sugars, mono, poly,
                 vitaminA, vitaminC, vitaminD, vitaminE, vitaminK,
                 vitaminB1, vitaminB2, vitaminB3, vitaminB6, vitaminB12, folate,
-                calcium, iron, magnesium, phosphorus, potassium, zinc, selenium, copper);
+                calcium, iron, magnesium, phosphorus, potassium, zinc, selenium, copper,
+                choline, pantothenicAcid, biotin, manganese, iodine, epa, dha);
     }
 
     private double getNutrientValue(JsonNode foodNutrients, String nutrientName,
@@ -207,6 +241,29 @@ public class NutrientDataService {
             JsonNode nameNode = target.get(nameField);
             if (nameNode != null && nutrientName.equals(nameNode.asText())) {
                 JsonNode valueNode = (nutrientObj != null) ? entry.get(valueField) : entry.get(valueField);
+                if (valueNode != null && !valueNode.isNull()) {
+                    return valueNode.asDouble(0.0);
+                }
+            }
+        }
+        return 0.0;
+    }
+
+    private double getNutrientValueById(JsonNode foodNutrients, int nutrientId,
+                                        String nutrientObj, String valueField) {
+        for (JsonNode entry : foodNutrients) {
+            int entryId;
+            if (nutrientObj != null) {
+                JsonNode nutrient = entry.get(nutrientObj);
+                if (nutrient == null || nutrient.get("id") == null) continue;
+                entryId = nutrient.get("id").asInt();
+            } else {
+                JsonNode idNode = entry.get("nutrientId");
+                if (idNode == null) continue;
+                entryId = idNode.asInt();
+            }
+            if (entryId == nutrientId) {
+                JsonNode valueNode = entry.get(valueField);
                 if (valueNode != null && !valueNode.isNull()) {
                     return valueNode.asDouble(0.0);
                 }
@@ -243,6 +300,13 @@ public class NutrientDataService {
             double potassium,
             double zinc,
             double selenium,
-            double copper
+            double copper,
+            double choline,
+            double pantothenicAcid,
+            double biotin,
+            double manganese,
+            double iodine,
+            double epa,
+            double dha
     ) {}
 }
