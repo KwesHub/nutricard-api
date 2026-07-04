@@ -95,6 +95,17 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
                 "OR micro_breakdown NOT LIKE '%topNutrients%'");
+        // Fix 7: Rarity weighting changed from redistribution (abundant nutrients discounted
+        // below baseline) to pure bonus (abundant nutrients keep full weight), with the divisor
+        // recalibrated 1.2 -> 1.31 to hold the peanut butter ~58.8 anchor. Canary: peanut
+        // butter scored ~50 under the discount scheme and ~64 under the uncalibrated bonus
+        // scheme; ~58.8 after this fix, so the 55-62 window makes it a no-op after one rescore.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE EXISTS (" +
+                "  SELECT 1 FROM nutrition_scores ns2" +
+                "  JOIN foods f ON f.id = ns2.food_id" +
+                "  WHERE f.name = 'Peanut butter'" +
+                "  AND (ns2.micronutrient_density < 55 OR ns2.micronutrient_density > 62))");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(

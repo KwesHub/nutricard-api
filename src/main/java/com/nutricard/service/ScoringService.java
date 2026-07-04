@@ -240,26 +240,23 @@ public class ScoringService {
             550, 5, 30, 2.3, 150, 0.5, 0.5
     };
 
-    // Rarity weights, same order as NUTRIENT_NAMES. Shortfall nutrients (under-consumed in
-    // typical diets or concentrated in few foods) count more toward micronutrient density;
-    // abundant ones count less. Tiers: 1.5 rare/shortfall, 1.25 under-consumed, 1.0 baseline,
-    // 0.75 abundant. Normalized to mean 1.0 below so a food with even coverage across all
-    // nutrients scores exactly as it did before rarity weighting (peanut butter anchor holds).
-    private static final double[] RARITY_WEIGHTS_RAW = {
+    // Rarity weights, same order as NUTRIENT_NAMES. Rarity is a bonus, not a redistribution:
+    // shortfall nutrients (under-consumed in typical diets or concentrated in few foods) count
+    // extra, while abundant nutrients keep full baseline weight — a food rich in easy-to-get
+    // nutrients is never marked down for it. Tiers: 1.5 rare/shortfall, 1.25 under-consumed,
+    // 1.0 everything else.
+    private static final double[] RARITY_WEIGHTS = {
             1.0, 1.0, 1.5, 1.25, 1.25,
-            0.75, 0.75, 0.75, 1.0, 1.0,
-            1.25, 1.25, 1.25, 1.25, 0.75,
+            1.0, 1.0, 1.0, 1.0, 1.0,
+            1.25, 1.25, 1.25, 1.25, 1.0,
             1.5, 1.25, 1.25, 1.0,
-            1.5, 0.75, 1.0, 0.75, 1.5, 1.5, 1.5
+            1.5, 1.0, 1.0, 1.0, 1.5, 1.5, 1.5
     };
-    private static final double[] RARITY_WEIGHTS;
     private static final Set<String> RARE_NUTRIENTS;
     static {
-        double mean = Arrays.stream(RARITY_WEIGHTS_RAW).average().orElse(1.0);
-        RARITY_WEIGHTS = Arrays.stream(RARITY_WEIGHTS_RAW).map(w -> w / mean).toArray();
         Set<String> rare = new HashSet<>();
         for (int i = 0; i < NUTRIENT_NAMES.length; i++) {
-            if (RARITY_WEIGHTS_RAW[i] >= 1.25) rare.add(NUTRIENT_NAMES[i]);
+            if (RARITY_WEIGHTS[i] >= 1.25) rare.add(NUTRIENT_NAMES[i]);
         }
         RARE_NUTRIENTS = Set.copyOf(rare);
     }
@@ -297,8 +294,9 @@ public class ScoringService {
 
         // 2. Micronutrient density — RDA coverage per 100 kcal, summed across all tracked nutrients.
         // Scoring per 100 kcal (not per 100g) so calorie-dense foods like peanut butter can't game
-        // the formula by volume. Divisor 1.2 calibrated so peanut butter (~588 kcal) scores ~58.8
-        // and genuinely dense foods (spinach ~23 kcal, sardines) saturate the 100-cap.
+        // the formula by volume. Divisor 1.31 calibrated so peanut butter (~588 kcal) scores ~58.8
+        // under the bonus-style rarity weights, and genuinely dense foods (spinach ~23 kcal,
+        // sardines) saturate the 100-cap.
         double kcal = data.energyKcal100g();
         if (kcal <= 0) {
             log.warn("energyKcal missing for '{}' — using 100 kcal fallback for micronutrient density", name);
@@ -323,7 +321,7 @@ public class ScoringService {
             pctRdaPer100g[i] = nutrientValues[i] / RDA_VALUES[i] * 100.0;
         }
 
-        double micronutrientDensity = Math.min(weightedCoverageSum / 1.2 * 100 * bioavailability, 100);
+        double micronutrientDensity = Math.min(weightedCoverageSum / 1.31 * 100 * bioavailability, 100);
 
         // 3. Energy profile (NEUTRAL default)
         double energyProfile = calculateEnergyProfile(data, name, TimingContext.NEUTRAL);
