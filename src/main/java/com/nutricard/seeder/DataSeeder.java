@@ -63,6 +63,12 @@ public class DataSeeder implements CommandLineRunner {
         // Canary: gut_breakdown column without omega3Bonus field identifies pre-bonus scores.
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE gut_breakdown NOT LIKE '%omega3Bonus%'");
+        // Fix 6: Micronutrient scoring is now rarity-weighted and micro_breakdown carries the
+        // full per-nutrient coverage vector. Canary: rows without the topNutrients key predate
+        // the change (IS NULL covers fallback-scored rows, which had no breakdown at all).
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
+                "OR micro_breakdown NOT LIKE '%topNutrients%'");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
@@ -117,6 +123,7 @@ public class DataSeeder implements CommandLineRunner {
         foods.add(createFood("Sweet corn", "VEGETABLE", FoodRole.DAILY_DRIVER, 80));
         foods.add(createFood("Bell pepper", "VEGETABLE", FoodRole.DAILY_DRIVER, 80));
         foods.add(createFood("Tomato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Brazil nuts", "NUT", FoodRole.BOOSTER, 10));
 
         for (Food food : foods) {
             NutritionScore score = scoringService.calculateScores(food);
@@ -139,6 +146,7 @@ public class DataSeeder implements CommandLineRunner {
         seedFoodIfMissing("Sweet corn", "VEGETABLE", FoodRole.DAILY_DRIVER, 80);
         seedFoodIfMissing("Bell pepper", "VEGETABLE", FoodRole.DAILY_DRIVER, 80);
         seedFoodIfMissing("Tomato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100);
+        seedFoodIfMissing("Brazil nuts", "NUT", FoodRole.BOOSTER, 10);
     }
 
     private void seedFoodIfMissing(String name, String category, FoodRole role, int servingSizeG) {
