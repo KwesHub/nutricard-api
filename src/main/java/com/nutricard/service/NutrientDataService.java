@@ -74,7 +74,8 @@ public class NutrientDataService {
             Map.entry("Chia seeds", 170554),
             Map.entry("Sweet corn", 169997),
             Map.entry("Bell pepper", 170108),
-            Map.entry("Tomato", 170457)
+            Map.entry("Tomato", 170457),
+            Map.entry("Brazil nuts", 170569)
     );
 
 

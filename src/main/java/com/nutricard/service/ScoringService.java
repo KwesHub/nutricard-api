@@ -1,5 +1,8 @@
 package com.nutricard.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nutricard.model.Food;
 import com.nutricard.model.NutritionScore;
 import com.nutricard.model.TimingContext;
@@ -10,8 +13,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +43,8 @@ public class ScoringService {
             Map.entry("Walnuts", 0.50), Map.entry("Cottage cheese", 1.00),
             Map.entry("Lemon", 0.60), Map.entry("Flaxseed", 0.52),
             Map.entry("Chia seeds", 0.60), Map.entry("Sweet corn", 0.55),
-            Map.entry("Bell pepper", 0.60), Map.entry("Tomato", 0.60)
+            Map.entry("Bell pepper", 0.60), Map.entry("Tomato", 0.60),
+            Map.entry("Brazil nuts", 0.45)
     );
 
     private static final Map<String, Double> COMPLETENESS_MAP = Map.ofEntries(
@@ -56,7 +62,8 @@ public class ScoringService {
             Map.entry("Walnuts", 0.60), Map.entry("Cottage cheese", 1.0),
             Map.entry("Lemon", 0.60), Map.entry("Flaxseed", 0.65),
             Map.entry("Chia seeds", 0.65), Map.entry("Sweet corn", 0.60),
-            Map.entry("Bell pepper", 0.60), Map.entry("Tomato", 0.60)
+            Map.entry("Bell pepper", 0.60), Map.entry("Tomato", 0.60),
+            Map.entry("Brazil nuts", 0.60)
     );
 
     private static final Map<String, Double> BIOAVAILABILITY_MAP = Map.ofEntries(
@@ -79,7 +86,8 @@ public class ScoringService {
             Map.entry("Walnuts", 0.70), Map.entry("Cottage cheese", 1.0),
             Map.entry("Lemon", 0.90), Map.entry("Flaxseed", 0.65),
             Map.entry("Chia seeds", 0.70), Map.entry("Sweet corn", 0.75),
-            Map.entry("Bell pepper", 0.90), Map.entry("Tomato", 0.90)
+            Map.entry("Bell pepper", 0.90), Map.entry("Tomato", 0.90),
+            Map.entry("Brazil nuts", 0.70)
     );
 
     private static final Map<String, Integer> GI_MAP = Map.ofEntries(
@@ -102,7 +110,8 @@ public class ScoringService {
             Map.entry("Walnuts", 15), Map.entry("Cottage cheese", 10),
             Map.entry("Lemon", 20), Map.entry("Flaxseed", 35),
             Map.entry("Chia seeds", 1), Map.entry("Sweet corn", 55),
-            Map.entry("Bell pepper", 15), Map.entry("Tomato", 15)
+            Map.entry("Bell pepper", 15), Map.entry("Tomato", 15),
+            Map.entry("Brazil nuts", 10)
     );
 
     private static final Map<String, Integer> PREBIOTIC_MAP = Map.ofEntries(
@@ -121,7 +130,7 @@ public class ScoringService {
             Map.entry("Oats", 5), Map.entry("Spinach", 5),
             Map.entry("Black beans", 10), Map.entry("Walnuts", 5),
             Map.entry("Flaxseed", 10), Map.entry("Chia seeds", 5),
-            Map.entry("Broccoli", 5)
+            Map.entry("Broccoli", 5), Map.entry("Brazil nuts", 8)
     );
 
     private static final Map<String, Double> PHYTO_MAP = Map.ofEntries(
@@ -144,7 +153,8 @@ public class ScoringService {
             Map.entry("Flaxseed", 72.0), Map.entry("Black beans", 72.0),
             Map.entry("Salmon", 70.0), Map.entry("Chia seeds", 65.0),
             Map.entry("Quinoa", 55.0), Map.entry("Sweet corn", 45.0),
-            Map.entry("Greek yogurt", 25.0), Map.entry("Cottage cheese", 20.0)
+            Map.entry("Greek yogurt", 25.0), Map.entry("Cottage cheese", 20.0),
+            Map.entry("Brazil nuts", 68.0)
     );
 
     private static final Map<String, Double> SYNERGY_MAP = Map.ofEntries(
@@ -167,7 +177,48 @@ public class ScoringService {
             Map.entry("Walnuts", 70.0), Map.entry("Cottage cheese", 58.0),
             Map.entry("Flaxseed", 62.0), Map.entry("Chia seeds", 65.0),
             Map.entry("Sweet corn", 55.0), Map.entry("Bell pepper", 85.0),
-            Map.entry("Tomato", 88.0)
+            Map.entry("Tomato", 88.0), Map.entry("Brazil nuts", 50.0)
+    );
+
+    // Curated educational one-liners — shown on the food card when present. Not persisted;
+    // attached to the response at serve time via getStandoutFact().
+    private static final Map<String, String> STANDOUT_FACTS = Map.ofEntries(
+            Map.entry("Brazil nuts", "Just 2 Brazil nuts (~10g) cover your entire daily selenium — one of the hardest nutrients to find anywhere else in the food supply."),
+            Map.entry("Sardines", "Eaten bones-and-all, sardines deliver calcium plus ~3g of EPA+DHA omega-3s per 100g — one of the few foods rich in both."),
+            Map.entry("Pearl barley", "One of the richest whole-grain sources of beta-glucan, the soluble fibre shown to lower LDL cholesterol."),
+            Map.entry("Oats", "Rich in beta-glucan soluble fibre, which feeds gut bacteria and helps blunt blood-sugar spikes."),
+            Map.entry("Spinach", "Among the most nutrient-dense low-calorie foods: 100g covers your vitamin K several times over for only ~23 kcal."),
+            Map.entry("Garlic", "Crushing garlic and letting it rest ~10 minutes before cooking activates allicin, its key therapeutic compound."),
+            Map.entry("Eggs", "One of the best natural sources of choline, a shortfall nutrient critical for brain and liver function."),
+            Map.entry("Kiwi", "Gram for gram, kiwi has more vitamin C than an orange — plus actinidin, an enzyme that aids protein digestion."),
+            Map.entry("Flaxseed", "The richest common source of lignans and plant omega-3 (ALA) — grind it first; whole seeds pass through undigested."),
+            Map.entry("Walnuts", "The only common nut with meaningful plant omega-3 (ALA), plus polyphenols concentrated in the papery skin."),
+            Map.entry("Salmon", "Combines EPA+DHA omega-3s with vitamin D — two of the most under-consumed nutrients — in a single food."),
+            Map.entry("Greek yogurt", "Straining removes whey and concentrates the protein to roughly double regular yogurt's, with live cultures included."),
+            Map.entry("Broccoli", "A top source of sulforaphane, one of the most-studied phytonutrients — light steaming preserves far more of it than boiling."),
+            Map.entry("Chia seeds", "Absorb up to 10× their weight in water, forming a gel that slows digestion and steadies blood sugar."),
+            Map.entry("Dark chocolate 70%", "One of the highest polyphenol densities of any food — the higher the cacao %, the more polyphenols and the less sugar."),
+            Map.entry("Blueberries", "The anthocyanins in the skins are among the most-studied phytonutrients for brain and vascular health."),
+            Map.entry("Sweet potato", "The orange colour is beta-carotene — 100g covers your vitamin A needs; eat it with a little fat to absorb it."),
+            Map.entry("Cottage cheese", "One of the highest-casein foods — a slow-digesting protein, which is why lifters traditionally eat it before bed."),
+            Map.entry("Avocado", "Its fat helps you absorb fat-soluble vitamins (A, D, E, K) from other foods eaten in the same meal."),
+            Map.entry("Lemon", "The vitamin C in a squeeze of lemon can roughly triple non-haem iron absorption from plant foods like lentils and spinach.")
+    );
+
+    // Human explanation for every food carrying an ANTI_NUTRIENT_MAP penalty — why the score
+    // is lower than the raw nutrients suggest, and what to do about it.
+    private static final Map<String, String> ANTI_NUTRIENT_NOTES = Map.ofEntries(
+            Map.entry("Red kidney beans", "Contain phytates and lectins — thorough cooking neutralises the lectins, and soaking reduces the phytates."),
+            Map.entry("Red lentils", "Phytates bind some of the iron and zinc — soaking, or pairing with vitamin-C foods, improves absorption."),
+            Map.entry("Green lentils", "Phytates bind some of the iron and zinc — soaking, or pairing with vitamin-C foods, improves absorption."),
+            Map.entry("Oats", "Contain phytic acid, which binds minerals — soaking overnight (as in overnight oats) reduces it."),
+            Map.entry("Spinach", "High in oxalates, which bind its own calcium and iron — pair with vitamin-C foods to offset."),
+            Map.entry("Black beans", "Phytates and lectins — well cooked, most are neutralised, and the fibre benefit far outweighs the rest."),
+            Map.entry("Walnuts", "Contain some phytic acid — light toasting or soaking reduces it."),
+            Map.entry("Flaxseed", "Contains phytates and cyanogenic glycosides — harmless at normal intakes of 1–2 tablespoons a day."),
+            Map.entry("Chia seeds", "Contain some phytic acid — negligible at typical serving sizes."),
+            Map.entry("Broccoli", "Raw broccoli contains goitrogens that can interfere with iodine uptake — cooking largely deactivates them."),
+            Map.entry("Brazil nuts", "Selenium is so concentrated that regularly eating large handfuls can exceed the safe upper limit — 2–4 nuts a day is the sweet spot.")
     );
 
     // Overall score: top four stats weighted 50%, 30%, 15%, 5% (lowest stat ignored)
@@ -187,6 +238,32 @@ public class ScoringService {
             3500, 11, 55, 0.9,
             550, 5, 30, 2.3, 150, 0.5, 0.5
     };
+
+    // Rarity weights, same order as NUTRIENT_NAMES. Shortfall nutrients (under-consumed in
+    // typical diets or concentrated in few foods) count more toward micronutrient density;
+    // abundant ones count less. Tiers: 1.5 rare/shortfall, 1.25 under-consumed, 1.0 baseline,
+    // 0.75 abundant. Normalized to mean 1.0 below so a food with even coverage across all
+    // nutrients scores exactly as it did before rarity weighting (peanut butter anchor holds).
+    private static final double[] RARITY_WEIGHTS_RAW = {
+            1.0, 1.0, 1.5, 1.25, 1.25,
+            0.75, 0.75, 0.75, 1.0, 1.0,
+            1.25, 1.25, 1.25, 1.25, 0.75,
+            1.5, 1.25, 1.25, 1.0,
+            1.5, 0.75, 1.0, 0.75, 1.5, 1.5, 1.5
+    };
+    private static final double[] RARITY_WEIGHTS;
+    private static final Set<String> RARE_NUTRIENTS;
+    static {
+        double mean = Arrays.stream(RARITY_WEIGHTS_RAW).average().orElse(1.0);
+        RARITY_WEIGHTS = Arrays.stream(RARITY_WEIGHTS_RAW).map(w -> w / mean).toArray();
+        Set<String> rare = new HashSet<>();
+        for (int i = 0; i < NUTRIENT_NAMES.length; i++) {
+            if (RARITY_WEIGHTS_RAW[i] >= 1.25) rare.add(NUTRIENT_NAMES[i]);
+        }
+        RARE_NUTRIENTS = Set.copyOf(rare);
+    }
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     // --- Public entry point ---
 
@@ -235,21 +312,17 @@ public class ScoringService {
                 data.choline(), data.pantothenicAcid(), data.biotin(), data.manganese(),
                 data.iodine(), data.epa(), data.dha()
         };
-        double[] coverages = new double[nutrientValues.length];
-        double coverageSum = 0;
+        // Coverage stays capped at 1.0 per nutrient inside the score (mega-doses shouldn't
+        // multiply it); the uncapped per-100g percentages are surfaced in microBreakdown instead.
+        double weightedCoverageSum = 0;
+        double[] pctRdaPer100g = new double[nutrientValues.length];
         for (int i = 0; i < nutrientValues.length; i++) {
-            coverages[i] = Math.min(nutrientValues[i] * perKcalScale / RDA_VALUES[i], 1.0);
-            coverageSum += coverages[i];
+            double coverage = Math.min(nutrientValues[i] * perKcalScale / RDA_VALUES[i], 1.0);
+            weightedCoverageSum += coverage * RARITY_WEIGHTS[i];
+            pctRdaPer100g[i] = nutrientValues[i] / RDA_VALUES[i] * 100.0;
         }
-        // Find top nutrient for breakdown
-        int topIdx = 0;
-        for (int i = 1; i < coverages.length; i++) {
-            if (coverages[i] > coverages[topIdx]) topIdx = i;
-        }
-        String topNutrientName = NUTRIENT_NAMES[topIdx];
-        double topNutrientPct = round(coverages[topIdx] * 100);
 
-        double micronutrientDensity = Math.min(coverageSum / 1.2 * 100 * bioavailability, 100);
+        double micronutrientDensity = Math.min(weightedCoverageSum / 1.2 * 100 * bioavailability, 100);
 
         // 3. Energy profile (NEUTRAL default)
         double energyProfile = calculateEnergyProfile(data, name, TimingContext.NEUTRAL);
@@ -299,9 +372,7 @@ public class ScoringService {
         score.setGutBreakdown(String.format(
                 "{\"fibreG\":%.2f,\"prebioticBonus\":%d,\"antiNutrientPenalty\":%d,\"omega3Bonus\":%.1f}",
                 data.fiber100g(), prebioticBonus, antiNutrientPenalty, omega3Bonus));
-        score.setMicroBreakdown(String.format(
-                "{\"topNutrient\":\"%s\",\"coveragePct\":%.2f}",
-                topNutrientName, topNutrientPct));
+        score.setMicroBreakdown(buildMicroBreakdown(pctRdaPer100g));
 
         // Timing scores as JSON string
         StringBuilder tsJson = new StringBuilder("{");
@@ -381,7 +452,45 @@ public class ScoringService {
         return result;
     }
 
+    // --- Insight lookups (serve-time, not persisted) ---
+
+    public String getStandoutFact(String foodName) {
+        return STANDOUT_FACTS.get(foodName);
+    }
+
+    public String getPenaltyNote(String foodName) {
+        return ANTI_NUTRIENT_NOTES.get(foodName);
+    }
+
+    public static boolean isRareNutrient(String nutrientName) {
+        return RARE_NUTRIENTS.contains(nutrientName);
+    }
+
     // --- Utilities ---
+
+    // Built with Jackson rather than String.format: the coverages map is 26 entries, and
+    // FoodService.compare() parses this JSON back — hand-rolled formatting isn't worth the risk.
+    private String buildMicroBreakdown(double[] pctRdaPer100g) {
+        Integer[] indices = new Integer[pctRdaPer100g.length];
+        for (int i = 0; i < indices.length; i++) indices[i] = i;
+        Arrays.sort(indices, (a, b) -> Double.compare(pctRdaPer100g[b], pctRdaPer100g[a]));
+
+        ObjectNode json = MAPPER.createObjectNode();
+        ArrayNode top = json.putArray("topNutrients");
+        for (int rank = 0; rank < 3 && rank < indices.length; rank++) {
+            int i = indices[rank];
+            if (pctRdaPer100g[i] <= 0) break;
+            ObjectNode entry = top.addObject();
+            entry.put("name", NUTRIENT_NAMES[i]);
+            entry.put("pctRda", round1(pctRdaPer100g[i]));
+            entry.put("rare", isRareNutrient(NUTRIENT_NAMES[i]));
+        }
+        ObjectNode coverages = json.putObject("coverages");
+        for (int i = 0; i < pctRdaPer100g.length; i++) {
+            coverages.put(NUTRIENT_NAMES[i], round1(pctRdaPer100g[i]));
+        }
+        return json.toString();
+    }
 
     private double calculateOverallFromStats(double protein, double micro, double energy,
                                              double gut, double phyto) {
@@ -409,6 +518,10 @@ public class ScoringService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private double round1(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 
     // --- Fallback ---
@@ -453,6 +566,10 @@ public class ScoringService {
         }
 
         applyOverallScore(score);
+
+        // Carry the topNutrients sentinel so DataSeeder Fix 6 doesn't delete fallback scores
+        // on every startup (which would re-hit the USDA API for foods it already failed on).
+        score.setMicroBreakdown("{\"topNutrients\":[],\"coverages\":{}}");
 
         return score;
     }

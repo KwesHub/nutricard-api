@@ -10,4 +10,7 @@ import lombok.Data;
 public class FoodCardResponse {
     private Food food;
     private NutritionScore nutritionScore;
+    private CardInsights insights;
+
+    public record CardInsights(String standoutFact, String penaltyNote) {}
 }
