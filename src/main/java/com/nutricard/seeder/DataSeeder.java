@@ -7,6 +7,8 @@ import com.nutricard.repository.FoodRepository;
 import com.nutricard.repository.NutritionScoreRepository;
 import com.nutricard.service.ScoringService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -17,6 +19,8 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
 
     private final FoodRepository foodRepository;
     private final NutritionScoreRepository nutritionScoreRepository;
@@ -29,10 +33,32 @@ public class DataSeeder implements CommandLineRunner {
 
         if (foodRepository.count() > 0) {
             seedMissingFoods();
-            return;
+        } else {
+            seedFoods();
         }
 
-        seedFoods();
+        warmUpMissingScores();
+    }
+
+    // Migrations drop stale scores, which normally recompute lazily per card view. Meal gap
+    // suggestions, however, draw only on persisted scores — so recompute the missing ones in
+    // the background rather than serving thin suggestions until every card has been viewed.
+    private void warmUpMissingScores() {
+        Thread warmup = new Thread(() -> {
+            int computed = 0;
+            for (Food food : foodRepository.findAll()) {
+                if (nutritionScoreRepository.findByFoodId(food.getId()).isPresent()) continue;
+                try {
+                    nutritionScoreRepository.save(scoringService.calculateScores(food));
+                    computed++;
+                } catch (Exception e) {
+                    log.warn("Score warm-up failed for '{}': {}", food.getName(), e.getMessage());
+                }
+            }
+            if (computed > 0) log.info("Score warm-up computed {} missing scores", computed);
+        }, "score-warmup");
+        warmup.setDaemon(true);
+        warmup.start();
     }
 
     private void applyMigrations() {

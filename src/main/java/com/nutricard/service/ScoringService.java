@@ -1,5 +1,6 @@
 package com.nutricard.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -464,6 +465,21 @@ public class ScoringService {
 
     public static boolean isRareNutrient(String nutrientName) {
         return RARE_NUTRIENTS.contains(nutrientName);
+    }
+
+    // Parses the coverages map back out of a persisted microBreakdown (%RDA per 100g).
+    // Lives here because buildMicroBreakdown() below owns the JSON shape.
+    public Map<String, Double> parseCoverages(NutritionScore score) {
+        if (score.getMicroBreakdown() == null) return Map.of();
+        try {
+            JsonNode coverages = MAPPER.readTree(score.getMicroBreakdown()).path("coverages");
+            Map<String, Double> result = new LinkedHashMap<>();
+            coverages.fields().forEachRemaining(e -> result.put(e.getKey(), e.getValue().asDouble()));
+            return result;
+        } catch (Exception e) {
+            log.warn("Could not parse microBreakdown for score {}: {}", score.getId(), e.getMessage());
+            return Map.of();
+        }
     }
 
     // --- Utilities ---

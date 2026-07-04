@@ -1,5 +1,6 @@
 package com.nutricard.service;
 
+import com.nutricard.dto.MealCardResponse.NutrientAnalysis;
 import com.nutricard.model.*;
 import com.nutricard.repository.MealFoodRepository;
 import com.nutricard.repository.NutritionScoreRepository;
@@ -7,11 +8,24 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class MealScoringService {
+
+    // A nutrient the whole meal covers below this % of daily RDA is flagged as a gap.
+    private static final double GAP_THRESHOLD_PCT = 10.0;
+    // A candidate food fills a gap if it covers at least this % RDA per 100g.
+    private static final double SUGGESTION_COVER_MIN_PCT = 25.0;
+    private static final int SUGGESTION_LIMIT = 3;
+    // USDA SR Legacy has almost no data for these — a zero means missing data, not a
+    // missing nutrient, so reporting them as gaps would mislead.
+    private static final Set<String> GAP_EXCLUDED = Set.of("biotin", "iodine");
 
     private final MealFoodRepository mealFoodRepository;
     private final NutritionScoreRepository nutritionScoreRepository;
@@ -64,6 +78,62 @@ public class MealScoringService {
         mealScore.setActiveSynergies(String.join(",", synergies));
 
         return mealScore;
+    }
+
+    // --- Nutrient gap analysis ---
+    // Computed at serve time, not persisted: gaps depend on the current coverage data and
+    // suggestions depend on what else is in the food database right now.
+
+    public NutrientAnalysis analyzeNutrients(List<MealFood> mealFoods) {
+        // Aggregate: each food's %RDA-per-100g coverages, scaled by its gram quantity
+        Map<String, Double> coverage = new LinkedHashMap<>();
+        for (MealFood mealFood : mealFoods) {
+            NutritionScore ns = nutritionScoreRepository.findByFoodId(mealFood.getFood().getId())
+                    .orElseGet(() -> nutritionScoreRepository.save(
+                            scoringService.calculateScores(mealFood.getFood())));
+            double gramFactor = mealFood.getQuantityG() / 100.0;
+            scoringService.parseCoverages(ns).forEach((nutrient, pct) ->
+                    coverage.merge(nutrient, pct * gramFactor, Double::sum));
+        }
+        coverage.replaceAll((n, pct) -> Math.round(pct * 10.0) / 10.0);
+
+        List<NutrientAnalysis.Gap> gaps = coverage.entrySet().stream()
+                .filter(e -> e.getValue() < GAP_THRESHOLD_PCT && !GAP_EXCLUDED.contains(e.getKey()))
+                .map(e -> new NutrientAnalysis.Gap(e.getKey(), ScoringService.isRareNutrient(e.getKey())))
+                .sorted(Comparator.comparing(g -> !g.rare()))
+                .toList();
+
+        return new NutrientAnalysis(coverage, gaps, suggestFillers(mealFoods, gaps));
+    }
+
+    private List<NutrientAnalysis.Suggestion> suggestFillers(List<MealFood> mealFoods,
+                                                             List<NutrientAnalysis.Gap> gaps) {
+        if (gaps.isEmpty()) return List.of();
+        Set<Long> inMeal = mealFoods.stream()
+                .map(mf -> mf.getFood().getId())
+                .collect(java.util.stream.Collectors.toSet());
+
+        // Only foods with a persisted score are candidates — computing missing ones here
+        // would mean USDA API calls inside a request. The startup warm-up closes that gap.
+        record Candidate(Food food, List<String> covers, long rareCovers) {}
+        return nutritionScoreRepository.findAll().stream()
+                .filter(ns -> ns.getFood() != null && !inMeal.contains(ns.getFood().getId()))
+                .map(ns -> {
+                    Map<String, Double> c = scoringService.parseCoverages(ns);
+                    List<String> covers = gaps.stream()
+                            .map(NutrientAnalysis.Gap::name)
+                            .filter(n -> c.getOrDefault(n, 0.0) >= SUGGESTION_COVER_MIN_PCT)
+                            .toList();
+                    long rareCovers = covers.stream().filter(ScoringService::isRareNutrient).count();
+                    return new Candidate(ns.getFood(), covers, rareCovers);
+                })
+                .filter(cand -> !cand.covers().isEmpty())
+                .sorted(Comparator.comparingInt((Candidate cand) -> cand.covers().size()).reversed()
+                        .thenComparing(Comparator.comparingLong(Candidate::rareCovers).reversed()))
+                .limit(SUGGESTION_LIMIT)
+                .map(cand -> new NutrientAnalysis.Suggestion(
+                        cand.food().getId(), cand.food().getName(), cand.covers()))
+                .toList();
     }
 
     private double calculateOverallByTiming(TimingContext timing,

@@ -45,14 +45,17 @@ public class MealService {
         mealScoreRepository.save(mealScore);
 
         List<MealFood> mealFoods = mealFoodRepository.findByMealId(meal.getId());
-        return new MealCardResponse(meal, mealScore, mealFoods);
+        return new MealCardResponse(meal, mealScore, mealFoods,
+                mealScoringService.analyzeNutrients(mealFoods));
     }
 
+    @Transactional
     public MealCardResponse getMealCard(Long id) {
         Meal meal = mealRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meal not found"));
         MealScore mealScore = mealScoreRepository.findByMealId(meal.getId()).orElse(null);
         List<MealFood> mealFoods = mealFoodRepository.findByMealId(meal.getId());
-        return new MealCardResponse(meal, mealScore, mealFoods);
+        return new MealCardResponse(meal, mealScore, mealFoods,
+                mealScoringService.analyzeNutrients(mealFoods));
     }
 }
