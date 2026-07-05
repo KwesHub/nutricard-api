@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.nutricard.dto.Badge;
 import com.nutricard.model.Food;
 import com.nutricard.model.NutritionScore;
 import com.nutricard.model.TimingContext;
@@ -13,9 +14,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -221,6 +225,26 @@ public class ScoringService {
             Map.entry("Broccoli", "Raw broccoli contains goitrogens that can interfere with iodine uptake — cooking largely deactivates them."),
             Map.entry("Brazil nuts", "Selenium is so concentrated that regularly eating large handfuls can exceed the safe upper limit — 2–4 nuts a day is the sweet spot.")
     );
+
+    // Short chip label for the watch badge — one per food in ANTI_NUTRIENT_NOTES. Unlike
+    // strength badges (nutrient keys, formatted client-side), these are literal display text.
+    private static final Map<String, String> ANTI_NUTRIENT_BADGES = Map.ofEntries(
+            Map.entry("Red kidney beans", "Lectins"),
+            Map.entry("Red lentils", "Phytates"),
+            Map.entry("Green lentils", "Phytates"),
+            Map.entry("Oats", "Phytates"),
+            Map.entry("Spinach", "Oxalates"),
+            Map.entry("Black beans", "Phytates"),
+            Map.entry("Walnuts", "Phytates"),
+            Map.entry("Flaxseed", "Phytates"),
+            Map.entry("Chia seeds", "Phytates"),
+            Map.entry("Broccoli", "Goitrogens (raw)"),
+            Map.entry("Brazil nuts", "Selenium cap")
+    );
+
+    // A nutrient earns a strength badge when 100g covers at least half its RDA.
+    private static final double BADGE_MIN_PCT_RDA = 50.0;
+    private static final int BADGE_STRENGTH_LIMIT = 3;
 
     // Overall score: top four stats weighted 50%, 30%, 15%, 5% (lowest stat ignored)
     private static final double[] OVERALL_STAT_WEIGHTS = {0.50, 0.30, 0.15, 0.05};
@@ -463,6 +487,29 @@ public class ScoringService {
 
     public static boolean isRareNutrient(String nutrientName) {
         return RARE_NUTRIENTS.contains(nutrientName);
+    }
+
+    // Derived at serve time, never persisted: up to three strength badges from the persisted
+    // coverage vector (rare nutrients first — they differentiate foods — then by coverage),
+    // plus a watch chip for foods carrying an anti-nutrient note. A null or fallback score
+    // (empty coverages) yields no strength badges rather than an error.
+    public List<Badge> deriveBadges(NutritionScore score, String foodName) {
+        List<Badge> badges = new ArrayList<>();
+        if (score != null) {
+            parseCoverages(score).entrySet().stream()
+                    .filter(e -> e.getValue() >= BADGE_MIN_PCT_RDA)
+                    .sorted(Comparator
+                            .comparing((Map.Entry<String, Double> e) -> !isRareNutrient(e.getKey()))
+                            .thenComparing(Map.Entry::getValue, Comparator.reverseOrder()))
+                    .limit(BADGE_STRENGTH_LIMIT)
+                    .forEach(e -> badges.add(new Badge(e.getKey(),
+                            isRareNutrient(e.getKey()) ? "rare" : "strength")));
+        }
+        String watch = ANTI_NUTRIENT_BADGES.get(foodName);
+        if (watch != null) {
+            badges.add(new Badge(watch, "watch"));
+        }
+        return badges;
     }
 
     // Parses the coverages map back out of a persisted microBreakdown (%RDA per 100g).

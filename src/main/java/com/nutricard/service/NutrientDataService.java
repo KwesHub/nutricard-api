@@ -69,10 +69,10 @@ public class NutrientDataService {
             Map.entry("Black beans", 173735),
             Map.entry("Walnuts", 170187),
             Map.entry("Cottage cheese", 173417),
-            Map.entry("Lemon", 168299),
+            Map.entry("Lemon", 167746),
             Map.entry("Flaxseed", 169414),
             Map.entry("Chia seeds", 170554),
-            Map.entry("Sweet corn", 169997),
+            Map.entry("Sweet corn", 169998),
             Map.entry("Bell pepper", 170108),
             Map.entry("Tomato", 170457),
             Map.entry("Brazil nuts", 170569)

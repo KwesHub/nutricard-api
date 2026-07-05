@@ -5,6 +5,8 @@ import com.nutricard.model.NutritionScore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 @AllArgsConstructor
 public class FoodCardResponse {
@@ -12,5 +14,5 @@ public class FoodCardResponse {
     private NutritionScore nutritionScore;
     private CardInsights insights;
 
-    public record CardInsights(String standoutFact, String penaltyNote) {}
+    public record CardInsights(String standoutFact, String penaltyNote, List<Badge> badges) {}
 }

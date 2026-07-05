@@ -2,7 +2,7 @@ package com.nutricard.controller;
 
 import com.nutricard.dto.CompareResponse;
 import com.nutricard.dto.FoodCardResponse;
-import com.nutricard.model.Food;
+import com.nutricard.dto.FoodListItem;
 import com.nutricard.service.FoodService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -17,7 +17,7 @@ public class FoodController {
     private final FoodService foodService;
 
     @GetMapping
-    public List<Food> getAllFoods(@RequestParam(required = false) String search) {
+    public List<FoodListItem> getAllFoods(@RequestParam(required = false) String search) {
         return foodService.getAll(search);
     }
 

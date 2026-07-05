@@ -2,6 +2,7 @@ package com.nutricard.service;
 
 import com.nutricard.dto.CompareResponse;
 import com.nutricard.dto.FoodCardResponse;
+import com.nutricard.dto.FoodListItem;
 import com.nutricard.model.Food;
 import com.nutricard.model.FoodRole;
 import com.nutricard.model.NutritionScore;
@@ -16,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,11 +33,18 @@ public class FoodService {
     private final NutritionScoreRepository nutritionScoreRepository;
     private final ScoringService scoringService;
 
-    public List<Food> getAll(String search) {
-        if (search != null && !search.isBlank()) {
-            return foodRepository.findByNameContainingIgnoreCase(search);
-        }
-        return foodRepository.findAll();
+    public List<FoodListItem> getAll(String search) {
+        List<Food> foods = (search != null && !search.isBlank())
+                ? foodRepository.findByNameContainingIgnoreCase(search)
+                : foodRepository.findAll();
+        // One query for all scores instead of one per food; foods whose score hasn't been
+        // computed yet (mid warm-up) simply get no badges.
+        Map<Long, NutritionScore> scoresByFoodId = nutritionScoreRepository.findAll().stream()
+                .collect(Collectors.toMap(s -> s.getFood().getId(), s -> s));
+        return foods.stream()
+                .map(f -> FoodListItem.of(f,
+                        scoringService.deriveBadges(scoresByFoodId.get(f.getId()), f.getName())))
+                .toList();
     }
 
     @Transactional
@@ -55,7 +64,8 @@ public class FoodService {
 
         return new FoodCardResponse(food, score, new FoodCardResponse.CardInsights(
                 scoringService.getStandoutFact(food.getName()),
-                scoringService.getPenaltyNote(food.getName())));
+                scoringService.getPenaltyNote(food.getName()),
+                scoringService.deriveBadges(score, food.getName())));
     }
 
     @Transactional

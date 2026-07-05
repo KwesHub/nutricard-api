@@ -106,6 +106,14 @@ public class DataSeeder implements CommandLineRunner {
                 "  JOIN foods f ON f.id = ns2.food_id" +
                 "  WHERE f.name = 'Peanut butter'" +
                 "  AND (ns2.micronutrient_density < 55 OR ns2.micronutrient_density > 62))");
+        // Fix 8: Lemon's FDC ID pointed at pork backribs (168299) and Sweet corn's at cilantro
+        // leaves (169997) — badges surfaced both. IDs corrected to 167746 / 169998. Canary:
+        // the wrong entries scored ~224 kcal for lemon (real: ~29) and ~23 kcal for corn
+        // (real: ~86), so the kcal windows identify poisoned scores and then become no-ops.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Lemon') AND kcal_per100g > 100");
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Sweet corn') AND kcal_per100g < 50");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
