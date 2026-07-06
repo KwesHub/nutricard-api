@@ -22,7 +22,10 @@ public class MealCardResponse {
             List<Gap> gaps,
             List<Suggestion> suggestions
     ) {
-        public record Gap(String name, boolean rare) {}
+        // cadence: "DAILY" for water-soluble nutrients you should top up every day,
+        // "WEEKLY" for storable ones (fat-soluble vitamins, B12, omega-3s) where the
+        // weekly average is what matters.
+        public record Gap(String name, boolean rare, String cadence) {}
 
         public record Suggestion(Long foodId, String foodName, List<String> covers) {}
     }

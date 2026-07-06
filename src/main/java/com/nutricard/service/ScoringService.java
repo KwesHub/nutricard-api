@@ -285,6 +285,13 @@ public class ScoringService {
         RARE_NUTRIENTS = Set.copyOf(rare);
     }
 
+    // Nutrients the body stores, where the weekly average matters more than any single day:
+    // fat-soluble vitamins (adipose/liver stores), B12 (liver stores last months), and
+    // EPA/DHA (membrane incorporation — "oily fish twice a week" is the standard advice).
+    // Everything else (water-soluble vitamins, minerals) is treated as a daily target.
+    private static final Set<String> WEEKLY_NUTRIENTS = Set.of(
+            "vitaminA", "vitaminD", "vitaminE", "vitaminK", "vitaminB12", "epa", "dha");
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     // --- Public entry point ---
@@ -489,6 +496,13 @@ public class ScoringService {
         return RARE_NUTRIENTS.contains(nutrientName);
     }
 
+    public static String nutrientCadence(String nutrientName) {
+        return WEEKLY_NUTRIENTS.contains(nutrientName) ? "WEEKLY" : "DAILY";
+    }
+
+    private static final String RARE_BADGE_DETAIL =
+            "A shortfall nutrient — hard to find in most diets, so foods rich in it are worth seeking out.";
+
     // Derived at serve time, never persisted: up to three strength badges from the persisted
     // coverage vector (rare nutrients first — they differentiate foods — then by coverage),
     // plus a watch chip for foods carrying an anti-nutrient note. A null or fallback score
@@ -502,14 +516,30 @@ public class ScoringService {
                             .comparing((Map.Entry<String, Double> e) -> !isRareNutrient(e.getKey()))
                             .thenComparing(Map.Entry::getValue, Comparator.reverseOrder()))
                     .limit(BADGE_STRENGTH_LIMIT)
-                    .forEach(e -> badges.add(new Badge(e.getKey(),
-                            isRareNutrient(e.getKey()) ? "rare" : "strength")));
+                    .forEach(e -> badges.add(isRareNutrient(e.getKey())
+                            ? new Badge(e.getKey(), "rare", RARE_BADGE_DETAIL)
+                            : new Badge(e.getKey(), "strength", null)));
         }
         String watch = ANTI_NUTRIENT_BADGES.get(foodName);
         if (watch != null) {
-            badges.add(new Badge(watch, "watch"));
+            badges.add(new Badge(watch, "watch", ANTI_NUTRIENT_NOTES.get(foodName)));
         }
         return badges;
+    }
+
+    // Parses the persisted timingScores JSON (context name -> score). Empty map when the
+    // score has no timing data (fallback-scored rows persist the "{}" sentinel).
+    public Map<String, Double> parseTimingScores(NutritionScore score) {
+        if (score.getTimingScores() == null) return Map.of();
+        try {
+            JsonNode node = MAPPER.readTree(score.getTimingScores());
+            Map<String, Double> result = new LinkedHashMap<>();
+            node.fields().forEachRemaining(e -> result.put(e.getKey(), e.getValue().asDouble()));
+            return result;
+        } catch (Exception e) {
+            log.warn("Could not parse timingScores for score {}: {}", score.getId(), e.getMessage());
+            return Map.of();
+        }
     }
 
     // Parses the coverages map back out of a persisted microBreakdown (%RDA per 100g).
@@ -631,6 +661,8 @@ public class ScoringService {
         // Carry the topNutrients sentinel so DataSeeder Fix 6 doesn't delete fallback scores
         // on every startup (which would re-hit the USDA API for foods it already failed on).
         score.setMicroBreakdown("{\"topNutrients\":[],\"coverages\":{}}");
+        // Same idea for Fix 9: "{}" marks "no timing data" without matching the IS NULL canary.
+        score.setTimingScores("{}");
 
         return score;
     }

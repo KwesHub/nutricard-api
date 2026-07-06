@@ -114,6 +114,24 @@ public class DataSeeder implements CommandLineRunner {
                 "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Lemon') AND kcal_per100g > 100");
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Sweet corn') AND kcal_per100g < 50");
+        // Fix 9: FoodService.getCard() used to null timingScores on a managed entity for
+        // PANTRY/OCCASIONAL foods, and dirty checking flushed the null to the DB — wiping
+        // timing data that meal timing scoring needs. Drop wiped rows so they recompute.
+        // Fallback-scored rows persist "{}" instead of NULL, so this stays a no-op for them.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE timing_scores IS NULL");
+        // Fix 10: role audit against the criteria in FUTURE_PLANS.md. WEEKLY_ANCHOR now means
+        // a genuine moderation-bound "2-3x a week" recommendation (oily fish, red meat).
+        // Legumes/whole grains/avocado are fine daily; 30g-serving nuts/nut butters are
+        // boosters. Scores don't depend on role, so no rescore needed. Idempotent via the
+        // AND food_role = 'WEEKLY_ANCHOR' guard.
+        jdbcTemplate.update(
+                "UPDATE foods SET food_role = 'DAILY_DRIVER' WHERE food_role = 'WEEKLY_ANCHOR' " +
+                "AND name IN ('Red lentils','Green lentils','Red kidney beans','Black beans'," +
+                "'Quinoa','Pearl barley','Avocado')");
+        jdbcTemplate.update(
+                "UPDATE foods SET food_role = 'BOOSTER' WHERE food_role = 'WEEKLY_ANCHOR' " +
+                "AND name IN ('Walnuts','Peanut butter')");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
@@ -137,11 +155,11 @@ public class DataSeeder implements CommandLineRunner {
         foods.add(createFood("Sweet potato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("Brown rice", "GRAIN", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("White rice", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Pearl barley", "GRAIN", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Pearl barley", "GRAIN", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("Whole-wheat spaghetti", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Red lentils", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Green lentils", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Red kidney beans", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
+        foods.add(createFood("Red lentils", "LEGUME", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Green lentils", "LEGUME", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Red kidney beans", "LEGUME", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("Peas", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("Spinach", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("Apple", "FRUIT", FoodRole.BOOSTER, 100));
@@ -150,17 +168,17 @@ public class DataSeeder implements CommandLineRunner {
         foods.add(createFood("Blueberries", "FRUIT", FoodRole.BOOSTER, 100));
         foods.add(createFood("Ginger", "VEGETABLE", FoodRole.BOOSTER, 10));
         foods.add(createFood("Honey", "OTHER", FoodRole.OCCASIONAL, 20));
-        foods.add(createFood("Peanut butter", "OTHER", FoodRole.WEEKLY_ANCHOR, 30));
+        foods.add(createFood("Peanut butter", "OTHER", FoodRole.BOOSTER, 30));
         foods.add(createFood("Tahini", "OTHER", FoodRole.PANTRY, 15));
         foods.add(createFood("Olive oil", "OTHER", FoodRole.PANTRY, 15));
         foods.add(createFood("Dark chocolate 70%", "OTHER", FoodRole.OCCASIONAL, 30));
         foods.add(createFood("Salmon", "FISH", FoodRole.WEEKLY_ANCHOR, 100));
         foods.add(createFood("Greek yogurt", "DAIRY", FoodRole.DAILY_DRIVER, 150));
         foods.add(createFood("Broccoli", "VEGETABLE", FoodRole.DAILY_DRIVER, 80));
-        foods.add(createFood("Avocado", "FRUIT", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Quinoa", "GRAIN", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Black beans", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Walnuts", "NUT", FoodRole.WEEKLY_ANCHOR, 30));
+        foods.add(createFood("Avocado", "FRUIT", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Quinoa", "GRAIN", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Black beans", "LEGUME", FoodRole.DAILY_DRIVER, 100));
+        foods.add(createFood("Walnuts", "NUT", FoodRole.BOOSTER, 30));
         foods.add(createFood("Cottage cheese", "DAIRY", FoodRole.DAILY_DRIVER, 100));
         foods.add(createFood("Lemon", "FRUIT", FoodRole.PANTRY, 15));
         foods.add(createFood("Flaxseed", "SEED", FoodRole.BOOSTER, 15));
@@ -180,10 +198,10 @@ public class DataSeeder implements CommandLineRunner {
         seedFoodIfMissing("Salmon", "FISH", FoodRole.WEEKLY_ANCHOR, 100);
         seedFoodIfMissing("Greek yogurt", "DAIRY", FoodRole.DAILY_DRIVER, 150);
         seedFoodIfMissing("Broccoli", "VEGETABLE", FoodRole.DAILY_DRIVER, 80);
-        seedFoodIfMissing("Avocado", "FRUIT", FoodRole.WEEKLY_ANCHOR, 100);
-        seedFoodIfMissing("Quinoa", "GRAIN", FoodRole.WEEKLY_ANCHOR, 100);
-        seedFoodIfMissing("Black beans", "LEGUME", FoodRole.WEEKLY_ANCHOR, 100);
-        seedFoodIfMissing("Walnuts", "NUT", FoodRole.WEEKLY_ANCHOR, 30);
+        seedFoodIfMissing("Avocado", "FRUIT", FoodRole.DAILY_DRIVER, 100);
+        seedFoodIfMissing("Quinoa", "GRAIN", FoodRole.DAILY_DRIVER, 100);
+        seedFoodIfMissing("Black beans", "LEGUME", FoodRole.DAILY_DRIVER, 100);
+        seedFoodIfMissing("Walnuts", "NUT", FoodRole.BOOSTER, 30);
         seedFoodIfMissing("Cottage cheese", "DAIRY", FoodRole.DAILY_DRIVER, 100);
         seedFoodIfMissing("Lemon", "FRUIT", FoodRole.PANTRY, 15);
         seedFoodIfMissing("Flaxseed", "SEED", FoodRole.BOOSTER, 15);

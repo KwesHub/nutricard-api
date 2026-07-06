@@ -41,6 +41,8 @@ public class MealScoringService {
         double weightedEnergy = 0;
         double weightedGut = 0;
         double weightedPhyto = 0;
+        double weightedTiming = 0;
+        boolean allFoodsHaveTimingScores = !mealFoods.isEmpty();
 
         List<FoodWithScore> foodsWithScores = new ArrayList<>();
 
@@ -58,13 +60,27 @@ public class MealScoringService {
             weightedGut += ns.getGutHealth() * weight;
             weightedPhyto += ns.getPhytonutrients() * weight;
 
+            Double foodTiming = scoringService.parseTimingScores(ns)
+                    .get(meal.getTimingContext().name());
+            if (foodTiming != null) {
+                weightedTiming += foodTiming * weight;
+            } else {
+                allFoodsHaveTimingScores = false;
+            }
+
             foodsWithScores.add(new FoodWithScore(mealFood.getFood(), ns));
         }
 
         List<String> synergies = detectSynergies(mealFoods, foodsWithScores);
 
-        double overallScore = calculateOverallByTiming(meal.getTimingContext(),
-                weightedProtein, weightedMicro, weightedEnergy, weightedGut, weightedPhyto);
+        // Per-food timing scores use the timing-flipped energy formula (high GI is good
+        // pre-workout, fibre is not), so a fibre-heavy meal correctly grades low PRE_WORKOUT.
+        // Re-weighting the neutral stats — the old behaviour, kept as fallback for meals
+        // containing fallback-scored foods — cannot capture that flip.
+        double overallScore = allFoodsHaveTimingScores
+                ? weightedTiming
+                : calculateOverallByTiming(meal.getTimingContext(),
+                        weightedProtein, weightedMicro, weightedEnergy, weightedGut, weightedPhyto);
 
         MealScore mealScore = new MealScore();
         mealScore.setMeal(meal);
@@ -99,7 +115,9 @@ public class MealScoringService {
 
         List<NutrientAnalysis.Gap> gaps = coverage.entrySet().stream()
                 .filter(e -> e.getValue() < GAP_THRESHOLD_PCT && !GAP_EXCLUDED.contains(e.getKey()))
-                .map(e -> new NutrientAnalysis.Gap(e.getKey(), ScoringService.isRareNutrient(e.getKey())))
+                .map(e -> new NutrientAnalysis.Gap(e.getKey(),
+                        ScoringService.isRareNutrient(e.getKey()),
+                        ScoringService.nutrientCadence(e.getKey())))
                 .sorted(Comparator.comparing(g -> !g.rare()))
                 .toList();
 
