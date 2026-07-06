@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -222,8 +223,7 @@ public class ScoringService {
             Map.entry("Walnuts", "Contain some phytic acid — light toasting or soaking reduces it."),
             Map.entry("Flaxseed", "Contains phytates and cyanogenic glycosides — harmless at normal intakes of 1–2 tablespoons a day."),
             Map.entry("Chia seeds", "Contain some phytic acid — negligible at typical serving sizes."),
-            Map.entry("Broccoli", "Raw broccoli contains goitrogens that can interfere with iodine uptake — cooking largely deactivates them."),
-            Map.entry("Brazil nuts", "Selenium is so concentrated that regularly eating large handfuls can exceed the safe upper limit — 2–4 nuts a day is the sweet spot.")
+            Map.entry("Broccoli", "Raw broccoli contains goitrogens that can interfere with iodine uptake — cooking largely deactivates them.")
     );
 
     // Short chip label for the watch badge — one per food in ANTI_NUTRIENT_NOTES. Unlike
@@ -238,8 +238,19 @@ public class ScoringService {
             Map.entry("Walnuts", "Phytates"),
             Map.entry("Flaxseed", "Phytates"),
             Map.entry("Chia seeds", "Phytates"),
-            Map.entry("Broccoli", "Goitrogens (raw)"),
-            Map.entry("Brazil nuts", "Selenium cap")
+            Map.entry("Broccoli", "Goitrogens (raw)")
+    );
+
+    // Foods with a genuine upper limit — a different axis from anti-nutrients (which you can
+    // reduce by soaking/cooking). These are "don't eat more than X" caps, shown as a distinct
+    // cap badge with the reason in the popover.
+    private static final Map<String, String> CAP_BADGES = Map.ofEntries(
+            Map.entry("Brazil nuts", "Max 2/day"),
+            Map.entry("Walnuts", "Max 15–20g/day")
+    );
+    private static final Map<String, String> CAP_NOTES = Map.ofEntries(
+            Map.entry("Brazil nuts", "Selenium is so concentrated that more than ~4 nuts a day can exceed the safe upper limit — treat it like a supplement, not a snack. Two nuts already cover your full daily selenium."),
+            Map.entry("Walnuts", "Genuinely good fats, but a high omega-6 load in larger amounts — a 15–20g topping is the sweet spot, not a daily handful.")
     );
 
     // A nutrient earns a strength badge when 100g covers at least half its RDA.
@@ -248,6 +259,26 @@ public class ScoringService {
 
     // Overall score: top four stats weighted 50%, 30%, 15%, 5% (lowest stat ignored)
     private static final double[] OVERALL_STAT_WEIGHTS = {0.50, 0.30, 0.15, 0.05};
+
+    // --- Two-axis "fuel" model (gastric-emptying, not glycaemic index) ---
+    // The energy/timing score places a food in a 2D space and measures how close it sits to
+    // each context's ideal quadrant (from the owner's Carbmaxxing Fuel Identification matrix):
+    //   stomachSpeed — how fast it leaves the stomach. Fat, fibre and protein are "brakes"
+    //                  that slow emptying; 1 = empties fast (rice, banana), 0 = sits heavy.
+    //   bloodSpeed   — how fast glucose hits the blood, proxied by GI. 1 = spike, 0 = trickle.
+    // "The Coma" (slow stomach + fast blood, e.g. pizza) sits far from every good target and
+    // scores low everywhere — which is the whole point.
+    private static final double BRAKE_K = 18.0;       // brake load that fully slows emptying
+    private static final double MAX_FUEL_DIST = Math.sqrt(2.0);  // corner-to-corner in the unit square
+
+    // Target {stomachSpeed, bloodSpeed} per context.
+    private static final Map<TimingContext, double[]> FUEL_TARGETS = new EnumMap<>(Map.of(
+            TimingContext.MORNING,      new double[]{0.25, 0.30},  // Diesel — slow, sustained
+            TimingContext.PRE_WORKOUT,  new double[]{1.00, 0.75},  // Rocket fuel — fast + fast
+            TimingContext.POST_WORKOUT, new double[]{0.75, 0.60},  // fast-ish carbs to refill glycogen
+            TimingContext.EVENING,      new double[]{0.70, 0.20},  // soft on the stomach, low-GI for sleep
+            TimingContext.NEUTRAL,      new double[]{0.50, 0.35}   // balanced, no workout skew
+    ));
 
     private static final String[] NUTRIENT_NAMES = {
             "vitaminA", "vitaminC", "vitaminD", "vitaminE", "vitaminK",
@@ -402,8 +433,9 @@ public class ScoringService {
                 "{\"rawProteinG\":%.2f,\"pdcaas\":%.2f,\"completenessFactor\":%.2f,\"bioavailability\":%.2f}",
                 data.proteins100g(), pdcaas, completeness, bioavailability));
         score.setEnergyBreakdown(String.format(
-                "{\"fibreG\":%.2f,\"gi\":%d,\"sugarsG\":%.2f,\"unsaturatedRatio\":%.2f}",
-                data.fiber100g(), gi, data.sugars100g(), unsaturatedRatio));
+                "{\"fibreG\":%.2f,\"gi\":%d,\"sugarsG\":%.2f,\"unsaturatedRatio\":%.2f,\"stomachSpeed\":%.2f,\"bloodSpeed\":%.2f}",
+                data.fiber100g(), gi, data.sugars100g(), unsaturatedRatio,
+                stomachSpeed(data), bloodSpeed(data, name)));
         score.setGutBreakdown(String.format(
                 "{\"fibreG\":%.2f,\"prebioticBonus\":%d,\"antiNutrientPenalty\":%d,\"omega3Bonus\":%.1f}",
                 data.fiber100g(), prebioticBonus, antiNutrientPenalty, omega3Bonus));
@@ -426,35 +458,41 @@ public class ScoringService {
     // --- Energy profile with timing context ---
 
     private double calculateEnergyProfile(NutrientData data, String foodName, TimingContext timingContext) {
-        int gi = GI_MAP.getOrDefault(foodName, 50);
-        double sugars = data.sugars100g();
-        double fiber = data.fiber100g();
-        double sugarPenalty = Math.min(sugars / 20.0, 1.0) * 25;
-        if (sugars > 0 && fiber / sugars >= 1.5 / 10.0) {
-            sugarPenalty *= 0.25;
-        }
-        double totalFat = data.fat100g();
-        double giMultiplier = totalFat < 2.0 ? 45.0 : 25.0;
-        double fatQuality;
-        if (totalFat < 2.0) {
-            fatQuality = 0;
-        } else {
-            double unsaturatedRatio = (data.monounsaturatedFat100g() + data.polyunsaturatedFat100g()) / totalFat;
-            fatQuality = unsaturatedRatio * 20;
-        }
+        double stomach = stomachSpeed(data);
+        double blood = bloodSpeed(data, foodName);
 
-        double fibreScore;
-        double giScore;
+        double[] target = FUEL_TARGETS.get(timingContext);
+        double dist = Math.hypot(stomach - target[0], blood - target[1]);
+        double score = 100.0 * (1.0 - dist / MAX_FUEL_DIST);
 
-        if (timingContext == TimingContext.PRE_WORKOUT || timingContext == TimingContext.POST_WORKOUT) {
-            giScore = (gi / 100.0) * giMultiplier;
-            fibreScore = Math.max(30 - (fiber * 3), 0);
-        } else {
-            giScore = (1.0 - (gi / 100.0)) * giMultiplier;
-            fibreScore = Math.min(fiber / 5.0, 1.0) * 30;
+        // Health guard: outside the workout windows, fast blood glucose from unbuffered added
+        // sugar should NOT read as good sustained fuel — otherwise treats like honey score well
+        // at breakfast/anytime. Pre/post-workout deliberately keep the rocket-fuel reward.
+        if (timingContext != TimingContext.PRE_WORKOUT && timingContext != TimingContext.POST_WORKOUT) {
+            double sugars = data.sugars100g();
+            boolean fibreBuffered = sugars > 0 && data.fiber100g() / sugars >= 0.15;
+            if (sugars > 0 && !fibreBuffered) {
+                score -= Math.min(sugars / 25.0, 1.0) * 15.0;
+            }
         }
 
-        return Math.min(Math.max(fibreScore + (25 - sugarPenalty) + giScore + fatQuality, 0), 100);
+        return clamp(score, 0, 100);
+    }
+
+    // How fast the food leaves the stomach. Fat is the strongest brake, then fibre, then
+    // protein; a food with little of any (white rice, banana, honey) empties fast → ~1.
+    private double stomachSpeed(NutrientData data) {
+        double brakeLoad = data.fat100g() * 3.0 + data.fiber100g() * 2.0 + data.proteins100g();
+        return clamp(1.0 - brakeLoad / BRAKE_K, 0, 1);
+    }
+
+    // How fast glucose reaches the blood, proxied by glycaemic index.
+    private double bloodSpeed(NutrientData data, String foodName) {
+        return clamp(GI_MAP.getOrDefault(foodName, 50) / 100.0, 0, 1);
+    }
+
+    private double clamp(double v, double lo, double hi) {
+        return Math.min(Math.max(v, lo), hi);
     }
 
     // --- Timing scores for all 5 contexts ---
@@ -528,6 +566,10 @@ public class ScoringService {
         String watch = ANTI_NUTRIENT_BADGES.get(foodName);
         if (watch != null) {
             badges.add(new Badge(watch, "watch", ANTI_NUTRIENT_NOTES.get(foodName)));
+        }
+        String cap = CAP_BADGES.get(foodName);
+        if (cap != null) {
+            badges.add(new Badge(cap, "cap", CAP_NOTES.get(foodName)));
         }
         return badges;
     }
@@ -668,6 +710,8 @@ public class ScoringService {
         score.setMicroBreakdown("{\"topNutrients\":[],\"coverages\":{}}");
         // Same idea for Fix 9: "{}" marks "no timing data" without matching the IS NULL canary.
         score.setTimingScores("{}");
+        // And for Fix 11: carry the stomachSpeed key so the energy-model canary is a no-op here.
+        score.setEnergyBreakdown("{\"stomachSpeed\":0.00,\"bloodSpeed\":0.00}");
 
         return score;
     }

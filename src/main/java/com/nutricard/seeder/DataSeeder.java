@@ -132,6 +132,13 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "UPDATE foods SET food_role = 'BOOSTER' WHERE food_role = 'WEEKLY_ANCHOR' " +
                 "AND name IN ('Walnuts','Peanut butter')");
+        // Fix 11: energy/timing scoring moved from a GI-centric formula to a two-axis
+        // gastric-emptying model (stomach speed vs blood speed), so every food's energy
+        // profile and timing scores change. Rescore all; the stomachSpeed key in
+        // energy_breakdown is the canary. Fallback rows carry the key too, so they survive.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE energy_breakdown IS NULL " +
+                "OR energy_breakdown NOT LIKE '%stomachSpeed%'");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
