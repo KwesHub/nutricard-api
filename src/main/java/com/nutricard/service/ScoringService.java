@@ -286,11 +286,16 @@ public class ScoringService {
     }
 
     // Nutrients the body stores, where the weekly average matters more than any single day:
-    // fat-soluble vitamins (adipose/liver stores), B12 (liver stores last months), and
-    // EPA/DHA (membrane incorporation — "oily fish twice a week" is the standard advice).
-    // Everything else (water-soluble vitamins, minerals) is treated as a daily target.
+    //   - fat-soluble vitamins A/D/E/K (adipose and liver stores)
+    //   - B12 (liver stores last months)
+    //   - EPA/DHA (membrane incorporation — "oily fish twice a week" is the standard advice)
+    //   - calcium (bone), iron/copper (liver ferritin), zinc/selenium (tissue stores)
+    // Everything else is a daily target: the water-soluble vitamins (B-complex, C) and the
+    // "sweat tax" electrolytes magnesium and potassium, which are actively flushed during
+    // training and hold almost no reserve.
     private static final Set<String> WEEKLY_NUTRIENTS = Set.of(
-            "vitaminA", "vitaminD", "vitaminE", "vitaminK", "vitaminB12", "epa", "dha");
+            "vitaminA", "vitaminD", "vitaminE", "vitaminK", "vitaminB12", "epa", "dha",
+            "calcium", "iron", "copper", "zinc", "selenium");
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
