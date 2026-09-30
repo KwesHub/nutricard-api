@@ -107,7 +107,7 @@ public class NutrientDataService {
     private NutrientData applyCookedCorrection(NutrientData d, CookedCorrection c) {
         return new NutrientData(
                 c.proteinG(), c.fiberG(), c.energyKcal(), d.fat100g(),
-                d.saturatedFat100g(), d.omega3Fat100g(), d.sugars100g(),
+                d.saturatedFat100g(), d.sugars100g(),
                 d.monounsaturatedFat100g(), d.polyunsaturatedFat100g(),
                 d.vitaminA(), d.vitaminC(), d.vitaminD(), d.vitaminE(), d.vitaminK(),
                 d.vitaminB1(), d.vitaminB2(), d.vitaminB3(), d.vitaminB6(), d.vitaminB12(),
@@ -189,7 +189,6 @@ public class NutrientDataService {
         double energyKcal = getNutrientValue(foodNutrients, "Energy", nutrientObj, nameField, valueField);
         double fat = getNutrientValue(foodNutrients, "Total lipid (fat)", nutrientObj, nameField, valueField);
         double saturatedFat = getNutrientValue(foodNutrients, "Fatty acids, total saturated", nutrientObj, nameField, valueField);
-        double omega3 = getNutrientValue(foodNutrients, "Fatty acids, total polyunsaturated", nutrientObj, nameField, valueField);
         double sugars = getNutrientValue(foodNutrients, "Sugars, total including NLEA", nutrientObj, nameField, valueField);
         if (sugars == 0.0) sugars = getNutrientValue(foodNutrients, "Sugars, total", nutrientObj, nameField, valueField);
         if (sugars == 0.0) sugars = getNutrientValue(foodNutrients, "Total Sugars", nutrientObj, nameField, valueField);
@@ -225,7 +224,7 @@ public class NutrientDataService {
         double epa = getNutrientValueById(foodNutrients, NUTRIENT_ID_EPA, nutrientObj, valueField);
         double dha = getNutrientValueById(foodNutrients, NUTRIENT_ID_DHA, nutrientObj, valueField);
 
-        return new NutrientData(proteins, fiber, energyKcal, fat, saturatedFat, omega3,
+        return new NutrientData(proteins, fiber, energyKcal, fat, saturatedFat,
                 sugars, mono, poly,
                 vitaminA, vitaminC, vitaminD, vitaminE, vitaminK,
                 vitaminB1, vitaminB2, vitaminB3, vitaminB6, vitaminB12, folate,
@@ -279,7 +278,6 @@ public class NutrientDataService {
             double energyKcal100g,
             double fat100g,
             double saturatedFat100g,
-            double omega3Fat100g,
             double sugars100g,
             double monounsaturatedFat100g,
             double polyunsaturatedFat100g,

@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+// Controller just routes: request in, call FoodService, response out.
+// Keeping the logic in the service is the separation of concerns bit.
 @RestController
 @RequestMapping("/foods")
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class FoodController {
         return foodService.compare(a, b);
     }
 
+    // First request for a food computes and saves its score. That happens in the service.
     @GetMapping("/{id}/card")
     public FoodCardResponse getFoodCard(@PathVariable Long id) {
         return foodService.getCard(id);

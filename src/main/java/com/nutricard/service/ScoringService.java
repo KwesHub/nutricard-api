@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// All the scoring rules live here, so the controllers stay thin.
 @Service
 @RequiredArgsConstructor
 public class ScoringService {
@@ -33,6 +34,8 @@ public class ScoringService {
     private final NutrientDataService nutrientDataService;
 
     // --- Lookup maps ---
+    // Hand-picked values per food, keyed on the exact name.
+    // A missing name quietly uses a default, so a typo won't throw an error.
 
     private static final Map<String, Double> PDCAAS_MAP = Map.ofEntries(
             Map.entry("Eggs", 1.00), Map.entry("Chicken breast", 0.91),
@@ -258,6 +261,7 @@ public class ScoringService {
     private static final int BADGE_STRENGTH_LIMIT = 3;
 
     // Overall score: top four stats weighted 50%, 30%, 15%, 5% (lowest stat ignored)
+    // Best stat counts most and the worst is dropped, so a food isn't marked down for something it isn't for.
     private static final double[] OVERALL_STAT_WEIGHTS = {0.50, 0.30, 0.15, 0.05};
 
     // --- Two-axis "fuel" model (gastric-emptying, not glycaemic index) ---
@@ -333,6 +337,8 @@ public class ScoringService {
     // --- Public entry point ---
 
     public NutritionScore calculateScores(Food food) {
+        // This waits on the USDA API (blocking, 10s timeout). Scores get saved, so it's once per food,
+        // and DataSeeder fills in any missing ones in the background at startup.
         NutrientData data = nutrientDataService.fetchNutrientData(food.getName());
         if (data != null) {
             return calculateFromRealData(food, data);
@@ -342,6 +348,8 @@ public class ScoringService {
 
     // --- Core scoring ---
 
+    // No network or DB in here, so the same nutrient data always gives the same score.
+    // It's the easiest part to unit test, and I haven't written those yet.
     private NutritionScore calculateFromRealData(Food food, NutrientData data) {
         NutritionScore score = new NutritionScore();
         score.setFood(food);
@@ -388,6 +396,8 @@ public class ScoringService {
             pctRdaPer100g[i] = nutrientValues[i] / RDA_VALUES[i] * 100.0;
         }
 
+        // 1.31 is a tuning number, not derived: it puts peanut butter at about 58.8.
+        // Foods with lots of nutrients per calorie hit the 100 cap easily.
         double micronutrientDensity = Math.min(weightedCoverageSum / 1.31 * 100 * bioavailability, 100);
 
         // 3. Energy profile (NEUTRAL default)
@@ -428,7 +438,8 @@ public class ScoringService {
         score.setSynergyPotential(synergyPotential);
         score.setEnergyProfileNeutral(round(energyProfile));
 
-        // Breakdowns as JSON strings
+        // Breakdowns are JSON strings in TEXT columns. Easy to change, but types.ts has to be kept
+        // in step by hand, and it's already behind on EnergyBreakdown (type drift).
         score.setProteinBreakdown(String.format(
                 "{\"rawProteinG\":%.2f,\"pdcaas\":%.2f,\"completenessFactor\":%.2f,\"bioavailability\":%.2f}",
                 data.proteins100g(), pdcaas, completeness, bioavailability));
@@ -457,6 +468,8 @@ public class ScoringService {
 
     // --- Energy profile with timing context ---
 
+    // Scores how close the food is to the ideal for this context, on two axes:
+    // how fast it leaves the stomach and how fast it hits the blood.
     private double calculateEnergyProfile(NutrientData data, String foodName, TimingContext timingContext) {
         double stomach = stomachSpeed(data);
         double blood = bloodSpeed(data, foodName);
@@ -497,6 +510,8 @@ public class ScoringService {
 
     // --- Timing scores for all 5 contexts ---
 
+    // Same five stats weighted differently per context, with energy recomputed each time.
+    // That's why meals average these per-food scores instead of re-weighting averaged stats.
     private Map<String, Double> calculateTimingScores(Food food, NutrientData data,
             double protein, double micro, double gut, double phyto) {
 
@@ -664,6 +679,8 @@ public class ScoringService {
 
     // --- Fallback ---
 
+    // Only Sardines, Oats and Garlic have real fallbacks. If USDA is down, other foods get saved
+    // as zeros, because I don't store the raw nutrient data to rescore from later.
     NutritionScore calculateFallback(Food food) {
         NutritionScore score = new NutritionScore();
         score.setFood(food);
