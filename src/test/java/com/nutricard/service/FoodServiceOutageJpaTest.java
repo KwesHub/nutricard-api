@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
-@Import({FoodService.class, NutritionScoreService.class, ScoringService.class})
+@Import({FoodService.class, NutritionScoreService.class, NutritionScoreWriter.class, ScoringService.class})
 class FoodServiceOutageJpaTest {
 
     @Autowired

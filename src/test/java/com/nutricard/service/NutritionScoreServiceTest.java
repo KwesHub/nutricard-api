@@ -5,6 +5,7 @@ import com.nutricard.model.NutritionScore;
 import com.nutricard.repository.NutritionScoreRepository;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,7 +29,7 @@ class NutritionScoreServiceTest {
 
     private final NutritionScoreRepository scores = mock(NutritionScoreRepository.class);
     private final ScoringService scoring = mock(ScoringService.class);
-    private final NutritionScoreService service = new NutritionScoreService(scores, scoring);
+    private final NutritionScoreService service = new NutritionScoreService(scores, scoring, new NutritionScoreWriter(scores));
 
     private Food food(long id, String name) {
         Food f = new Food();
@@ -162,5 +163,49 @@ class NutritionScoreServiceTest {
         assertFalse(service.computeIfMissing(eggs));
 
         verify(scores, never()).save(any());
+    }
+
+    // ---- losing a race to save ----
+
+    private NutritionScoreService serviceWithWriter(NutritionScoreWriter writer) {
+        return new NutritionScoreService(scores, scoring, writer);
+    }
+
+    @Test
+    void losingTheRaceToSaveReturnsTheWinnersScore() {
+        Food eggs = food(2, "Eggs");
+        NutritionScore mine = scoreFor(eggs);
+        NutritionScore winner = scoreFor(eggs);
+        NutritionScoreWriter writer = mock(NutritionScoreWriter.class);
+        when(writer.saveNow(mine)).thenThrow(new DataIntegrityViolationException("duplicate food_id"));
+        // first look: nothing saved yet; after the clash: the other thread's row
+        when(scores.findByFoodId(2L)).thenReturn(Optional.empty(), Optional.of(winner));
+        when(scoring.calculateFromUsda(eggs)).thenReturn(Optional.of(mine));
+
+        assertSame(winner, serviceWithWriter(writer).getOrCompute(eggs));
+    }
+
+    @Test
+    void anIntegrityFailureThatIsNotARaceIsNotSwallowed() {
+        Food eggs = food(2, "Eggs");
+        NutritionScore mine = scoreFor(eggs);
+        NutritionScoreWriter writer = mock(NutritionScoreWriter.class);
+        when(writer.saveNow(mine)).thenThrow(new DataIntegrityViolationException("null value in column"));
+        when(scores.findByFoodId(2L)).thenReturn(Optional.empty()); // still nothing saved, so it wasn't a race
+        when(scoring.calculateFromUsda(eggs)).thenReturn(Optional.of(mine));
+
+        assertThrows(DataIntegrityViolationException.class, () -> serviceWithWriter(writer).getOrCompute(eggs));
+    }
+
+    @Test
+    void computeIfMissingReportsFalseWhenAnotherThreadSavedFirst() {
+        Food eggs = food(2, "Eggs");
+        NutritionScore mine = scoreFor(eggs);
+        NutritionScoreWriter writer = mock(NutritionScoreWriter.class);
+        when(writer.saveNow(mine)).thenThrow(new DataIntegrityViolationException("duplicate food_id"));
+        when(scores.findByFoodId(2L)).thenReturn(Optional.empty(), Optional.of(scoreFor(eggs)));
+        when(scoring.calculateFromUsda(eggs)).thenReturn(Optional.of(mine));
+
+        assertFalse(serviceWithWriter(writer).computeIfMissing(eggs));
     }
 }

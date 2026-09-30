@@ -6,6 +6,7 @@ import com.nutricard.repository.NutritionScoreRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,6 +28,7 @@ public class NutritionScoreService {
 
     private final NutritionScoreRepository nutritionScoreRepository;
     private final ScoringService scoringService;
+    private final NutritionScoreWriter nutritionScoreWriter;
 
     public NutritionScore getOrCompute(Food food) {
         return nutritionScoreRepository.findByFoodId(food.getId())
@@ -55,8 +57,24 @@ public class NutritionScoreService {
                     food.getName());
             return false;
         }
-        nutritionScoreRepository.save(computed.get());
-        return true;
+        try {
+            nutritionScoreWriter.saveNow(computed.get());
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            if (nutritionScoreRepository.findByFoodId(food.getId()).isPresent()) return false; // someone else saved it first
+            throw e;
+        }
+    }
+
+    // Saved in its own transaction (see NutritionScoreWriter). If another thread saved a score for this
+    // food first, the unique food_id constraint rejects ours and we return theirs instead. Any other
+    // integrity failure is not a race, so it is rethrown.
+    private NutritionScore saveOrTakeExisting(NutritionScore score) {
+        try {
+            return nutritionScoreWriter.saveNow(score);
+        } catch (DataIntegrityViolationException e) {
+            return nutritionScoreRepository.findByFoodId(score.getFood().getId()).orElseThrow(() -> e);
+        }
     }
 
     // Real data: save it. No USDA data: serve the built-in fallback if the food has one (not saved, so
@@ -64,7 +82,7 @@ public class NutritionScoreService {
     private NutritionScore compute(Food food) {
         Optional<NutritionScore> computed = scoringService.calculateFromUsda(food);
         if (computed.isPresent()) {
-            return nutritionScoreRepository.save(computed.get());
+            return saveOrTakeExisting(computed.get());
         }
         if (scoringService.hasFallback(food)) {
             log.warn("No USDA data for '{}', serving its built-in fallback score without saving it", food.getName());

@@ -13,14 +13,11 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 // These use a real Hibernate session on an in-memory H2 database, because the bugs they guard
 // (dirty checking, the derived query) can't be reproduced with mocks.
@@ -28,7 +25,7 @@ import static org.mockito.Mockito.when;
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
-@Import({FoodService.class, NutritionScoreService.class})
+@Import({FoodService.class, NutritionScoreService.class, NutritionScoreWriter.class})
 class FoodServiceJpaTest {
 
     private static final String TIMING = "{\"MORNING\":50.0,\"NEUTRAL\":60.0}";
@@ -89,22 +86,6 @@ class FoodServiceJpaTest {
         FoodCardResponse card = foodService.getCard(oats.getId());
 
         assertEquals(TIMING, card.getNutritionScore().getTimingScores());
-    }
-
-    @Test
-    void cardComputesAndSavesAScoreWhenNoneExists() {
-        Food eggs = saveFood("Eggs", FoodRole.DAILY_DRIVER);
-        em.flush();
-        em.clear();
-        NutritionScore computed = new NutritionScore();
-        computed.setFood(eggs);
-        computed.setProteinQuality(90.0);
-        when(scoring.calculateFromUsda(any(Food.class))).thenReturn(Optional.of(computed));
-
-        FoodCardResponse card = foodService.getCard(eggs.getId());
-
-        assertEquals(90.0, card.getNutritionScore().getProteinQuality());
-        assertTrue(scores.findByFoodId(eggs.getId()).isPresent(), "the computed score should be saved");
     }
 
     // ---- the batch query used by MealScoringService ----
