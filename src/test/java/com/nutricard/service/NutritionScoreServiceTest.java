@@ -5,6 +5,9 @@ import com.nutricard.model.NutritionScore;
 import com.nutricard.repository.NutritionScoreRepository;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,6 +15,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -47,7 +51,7 @@ class NutritionScoreServiceTest {
 
         assertSame(saved, service.getOrCompute(oats));
 
-        verify(scoring, never()).calculateScores(any());
+        verify(scoring, never()).calculateFromUsda(any());
         verify(scores, never()).save(any());
     }
 
@@ -56,7 +60,7 @@ class NutritionScoreServiceTest {
         Food eggs = food(2, "Eggs");
         NutritionScore computed = scoreFor(eggs);
         when(scores.findByFoodId(2L)).thenReturn(Optional.empty());
-        when(scoring.calculateScores(eggs)).thenReturn(computed);
+        when(scoring.calculateFromUsda(eggs)).thenReturn(Optional.of(computed));
         when(scores.save(computed)).thenReturn(computed);
 
         assertSame(computed, service.getOrCompute(eggs));
@@ -71,7 +75,7 @@ class NutritionScoreServiceTest {
         NutritionScore savedA = scoreFor(a);
         NutritionScore computedB = scoreFor(b);
         when(scores.findByFoodIdIn(any())).thenReturn(List.of(savedA));
-        when(scoring.calculateScores(b)).thenReturn(computedB);
+        when(scoring.calculateFromUsda(b)).thenReturn(Optional.of(computedB));
         when(scores.save(computedB)).thenReturn(computedB);
 
         // A appears twice: the batch should not compute or query for it again
@@ -79,7 +83,7 @@ class NutritionScoreServiceTest {
 
         assertEquals(Map.of(1L, savedA, 2L, computedB), result);
         verify(scores, times(1)).findByFoodIdIn(any());
-        verify(scoring, times(1)).calculateScores(any());
+        verify(scoring, times(1)).calculateFromUsda(any());
         verify(scores, times(1)).save(any());
     }
 
@@ -88,7 +92,7 @@ class NutritionScoreServiceTest {
         Food eggs = food(2, "Eggs");
         NutritionScore computed = scoreFor(eggs);
         when(scores.findByFoodId(2L)).thenReturn(Optional.empty());
-        when(scoring.calculateScores(eggs)).thenReturn(computed);
+        when(scoring.calculateFromUsda(eggs)).thenReturn(Optional.of(computed));
 
         assertTrue(service.computeIfMissing(eggs));
 
@@ -102,6 +106,61 @@ class NutritionScoreServiceTest {
 
         assertFalse(service.computeIfMissing(oats));
 
-        verify(scoring, never()).calculateScores(any());
+        verify(scoring, never()).calculateFromUsda(any());
+    }
+
+    // ---- USDA unavailable ----
+
+    private void usdaDown(Food food) {
+        when(scores.findByFoodId(food.getId())).thenReturn(Optional.empty());
+        when(scoring.calculateFromUsda(food)).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void usdaDownServesTheBuiltInFallbackButNeverSavesIt() {
+        Food sardines = food(3, "Sardines");
+        NutritionScore fallback = scoreFor(sardines);
+        usdaDown(sardines);
+        when(scoring.hasFallback(sardines)).thenReturn(true);
+        when(scoring.calculateFallback(sardines)).thenReturn(fallback);
+
+        assertSame(fallback, service.getOrCompute(sardines));
+
+        verify(scores, never()).save(any());
+    }
+
+    @Test
+    void usdaDownWithNoFallbackIsA503AndSavesNothing() {
+        Food eggs = food(2, "Eggs");
+        usdaDown(eggs);
+        when(scoring.hasFallback(eggs)).thenReturn(false);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.getOrCompute(eggs));
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatusCode());
+        verify(scores, never()).save(any());
+    }
+
+    @Test
+    void aBatchWithAFoodThatHasNoDataAndNoFallbackFailsInsteadOfSavingZeros() {
+        Food a = food(1, "A");
+        Food b = food(2, "B");
+        when(scores.findByFoodIdIn(any())).thenReturn(List.of(scoreFor(a)));
+        when(scoring.calculateFromUsda(b)).thenReturn(Optional.empty());
+        when(scoring.hasFallback(b)).thenReturn(false);
+
+        assertThrows(ResponseStatusException.class, () -> service.getOrComputeAll(List.of(a, b)));
+
+        verify(scores, never()).save(any());
+    }
+
+    @Test
+    void computeIfMissingSavesNothingWhenUsdaIsDown() {
+        Food eggs = food(2, "Eggs");
+        usdaDown(eggs);
+
+        assertFalse(service.computeIfMissing(eggs));
+
+        verify(scores, never()).save(any());
     }
 }

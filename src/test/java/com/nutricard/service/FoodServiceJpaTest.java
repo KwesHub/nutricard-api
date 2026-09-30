@@ -13,6 +13,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -98,7 +99,7 @@ class FoodServiceJpaTest {
         NutritionScore computed = new NutritionScore();
         computed.setFood(eggs);
         computed.setProteinQuality(90.0);
-        when(scoring.calculateScores(any(Food.class))).thenReturn(computed);
+        when(scoring.calculateFromUsda(any(Food.class))).thenReturn(Optional.of(computed));
 
         FoodCardResponse card = foodService.getCard(eggs.getId());
 

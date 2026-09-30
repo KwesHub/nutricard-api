@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
@@ -360,14 +361,22 @@ public class ScoringService {
 
     // --- Public entry point ---
 
-    public NutritionScore calculateScores(Food food) {
-        // This waits on the USDA API (blocking, 10s timeout). Scores get saved, so it's once per food,
-        // and DataSeeder fills in any missing ones in the background at startup.
+    // Score from live USDA data, or empty if USDA has no data or can't be reached.
+    // This waits on the USDA API (blocking, 10s timeout). Scores get saved, so it's once per food,
+    // and DataSeeder fills in any missing ones in the background at startup.
+    public Optional<NutritionScore> calculateFromUsda(Food food) {
         NutrientData data = nutrientDataService.fetchNutrientData(food.getName());
-        if (data != null) {
-            return calculateFromRealData(food, data);
-        }
-        return calculateFallback(food);
+        return data == null ? Optional.empty() : Optional.of(calculateFromRealData(food, data));
+    }
+
+    // Always returns a score: real data if there is any, otherwise the fallback below.
+    // Anything that saves scores should go through NutritionScoreService, which never saves a fallback.
+    public NutritionScore calculateScores(Food food) {
+        return calculateFromUsda(food).orElseGet(() -> calculateFallback(food));
+    }
+
+    public boolean hasFallback(Food food) {
+        return FALLBACK_FOODS.contains(food.getName());
     }
 
     // --- Core scoring ---
@@ -697,8 +706,11 @@ public class ScoringService {
 
     // --- Fallback ---
 
-    // Only Sardines, Oats and Garlic have real fallbacks. If USDA is down, other foods get saved
-    // as zeros, because I don't store the raw nutrient data to rescore from later.
+    // Only these three foods have real hard-coded fallback scores (keep in step with the cases below).
+    // Everything else falls back to zeros, so NutritionScoreService serves a fallback while USDA is
+    // down but never saves it, and refuses foods that have none.
+    private static final Set<String> FALLBACK_FOODS = Set.of("Sardines", "Oats", "Garlic");
+
     NutritionScore calculateFallback(Food food) {
         NutritionScore score = new NutritionScore();
         score.setFood(food);

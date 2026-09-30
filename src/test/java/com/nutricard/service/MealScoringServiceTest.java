@@ -10,14 +10,17 @@ import com.nutricard.model.TimingContext;
 import com.nutricard.repository.MealFoodRepository;
 import com.nutricard.repository.NutritionScoreRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -139,7 +142,7 @@ class MealScoringServiceTest {
         Food b = food(2, "B");
         stubScores(simple(a, 80));
         NutritionScore computedB = simple(b, 40);
-        doReturn(computedB).when(scoring).calculateScores(b);
+        doReturn(Optional.of(computedB)).when(scoring).calculateFromUsda(b);
         when(scores.save(any(NutritionScore.class))).thenAnswer(inv -> inv.getArgument(0));
 
         MealScore result = scoreMeal(TimingContext.NEUTRAL, mealFood(a, 100), mealFood(b, 100));
@@ -160,6 +163,19 @@ class MealScoringServiceTest {
 
         verify(scores, times(1)).findByFoodIdIn(any());
         verify(scores, never()).findByFoodId(any());
+    }
+
+    @Test
+    void aFoodWithNoScoreAndNoUsdaDataFailsTheMealInsteadOfScoringItAsZero() {
+        Food a = food(1, "A");
+        Food b = food(2, "Mystery food");
+        stubScores(simple(a, 80));
+        when(mealFoods.findByMealId(1L)).thenReturn(List.of(mealFood(a, 100), mealFood(b, 100)));
+
+        // the USDA client mock returns nothing for B, and B has no built-in fallback
+        assertThrows(ResponseStatusException.class,
+                () -> service.calculateMealScore(meal(TimingContext.NEUTRAL)));
+        verify(scores, never()).save(any());
     }
 
     // ---- synergy rules ----

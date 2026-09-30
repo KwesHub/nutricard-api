@@ -106,4 +106,19 @@ class ScoringServiceTest {
         assertEquals(88.0, service.calculateScores(food("Sardines")).getProteinQuality(), 0.001);
         assertEquals(0.0, service.calculateScores(food("Mystery food")).getProteinQuality(), 0.001);
     }
+
+    @Test
+    void calculateFromUsdaIsEmptyWhenUsdaHasNoData() {
+        when(usda.fetchNutrientData(anyString())).thenReturn(null);
+
+        assertTrue(service.calculateFromUsda(food("Sardines")).isEmpty());
+    }
+
+    @Test
+    void onlySardinesOatsAndGarlicHaveAFallback() {
+        assertTrue(service.hasFallback(food("Sardines")));
+        assertTrue(service.hasFallback(food("Oats")));
+        assertTrue(service.hasFallback(food("Garlic")));
+        assertFalse(service.hasFallback(food("Eggs")));
+    }
 }
