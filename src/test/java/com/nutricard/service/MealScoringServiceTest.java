@@ -11,17 +11,21 @@ import com.nutricard.repository.MealFoodRepository;
 import com.nutricard.repository.NutritionScoreRepository;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -71,10 +75,17 @@ class MealScoringServiceTest {
         return score(food, protein, 0.0, "{}", "{}");
     }
 
+    // Scores the fake repository "has saved", returned by the single batch query
+    private final Map<Long, NutritionScore> saved = new HashMap<>();
+
     private void stubScores(NutritionScore... byFood) {
-        for (NutritionScore s : byFood) {
-            when(scores.findByFoodId(s.getFood().getId())).thenReturn(Optional.of(s));
-        }
+        for (NutritionScore s : byFood) saved.put(s.getFood().getId(), s);
+        // doAnswer, not when(): re-stubbing with when() would call the previous answer with null
+        doAnswer(inv -> {
+            Collection<Long> ids = inv.getArgument(0);
+            return saved.entrySet().stream()
+                    .filter(e -> ids.contains(e.getKey())).map(Map.Entry::getValue).toList();
+        }).when(scores).findByFoodIdIn(any());
     }
 
     private MealScore scoreMeal(TimingContext timing, MealFood... items) {
@@ -135,6 +146,19 @@ class MealScoringServiceTest {
         // the old bug skipped B but still divided by both foods' weight, giving 40 instead of 60
         assertEquals(60.0, result.getProteinQuality(), 0.001);
         verify(scores).save(computedB);
+    }
+
+    @Test
+    void allOfAMealsScoresComeFromOneQuery() {
+        Food a = food(1, "A");
+        Food b = food(2, "B");
+        Food c = food(3, "C");
+        stubScores(simple(a, 10), simple(b, 20), simple(c, 30));
+
+        scoreMeal(TimingContext.NEUTRAL, mealFood(a, 100), mealFood(b, 100), mealFood(c, 100));
+
+        verify(scores, times(1)).findByFoodIdIn(any());
+        verify(scores, never()).findByFoodId(any());
     }
 
     // ---- synergy rules ----

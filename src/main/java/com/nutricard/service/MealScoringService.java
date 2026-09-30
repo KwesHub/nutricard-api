@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -46,12 +47,9 @@ public class MealScoringService {
 
         List<FoodWithScore> foodsWithScores = new ArrayList<>();
 
+        Map<Long, NutritionScore> scoreByFoodId = scoresFor(mealFoods);
         for (MealFood mealFood : mealFoods) {
-            NutritionScore ns = nutritionScoreRepository.findByFoodId(mealFood.getFood().getId())
-                    .orElseGet(() -> {
-                        NutritionScore computed = scoringService.calculateScores(mealFood.getFood());
-                        return nutritionScoreRepository.save(computed);
-                    });
+            NutritionScore ns = scoreByFoodId.get(mealFood.getFood().getId());
 
             double weight = mealFood.getQuantityG() / totalWeight;
             weightedProtein += ns.getProteinQuality() * weight;
@@ -96,6 +94,19 @@ public class MealScoringService {
         return mealScore;
     }
 
+    // One query for all of the meal's scores instead of one per food. A food with no saved score
+    // is computed and saved here, the same as FoodService.getCard does.
+    private Map<Long, NutritionScore> scoresFor(List<MealFood> mealFoods) {
+        List<Long> foodIds = mealFoods.stream().map(mf -> mf.getFood().getId()).distinct().toList();
+        Map<Long, NutritionScore> byFoodId = nutritionScoreRepository.findByFoodIdIn(foodIds).stream()
+                .collect(Collectors.toMap(s -> s.getFood().getId(), s -> s));
+        for (MealFood mealFood : mealFoods) {
+            byFoodId.computeIfAbsent(mealFood.getFood().getId(),
+                    id -> nutritionScoreRepository.save(scoringService.calculateScores(mealFood.getFood())));
+        }
+        return byFoodId;
+    }
+
     // --- Nutrient gap analysis ---
     // Computed at serve time, not persisted: gaps depend on the current coverage data and
     // suggestions depend on what else is in the food database right now.
@@ -103,10 +114,9 @@ public class MealScoringService {
     public NutrientAnalysis analyzeNutrients(List<MealFood> mealFoods) {
         // Aggregate: each food's %RDA-per-100g coverages, scaled by its gram quantity
         Map<String, Double> coverage = new LinkedHashMap<>();
+        Map<Long, NutritionScore> scoreByFoodId = scoresFor(mealFoods);
         for (MealFood mealFood : mealFoods) {
-            NutritionScore ns = nutritionScoreRepository.findByFoodId(mealFood.getFood().getId())
-                    .orElseGet(() -> nutritionScoreRepository.save(
-                            scoringService.calculateScores(mealFood.getFood())));
+            NutritionScore ns = scoreByFoodId.get(mealFood.getFood().getId());
             double gramFactor = mealFood.getQuantityG() / 100.0;
             scoringService.parseCoverages(ns).forEach((nutrient, pct) ->
                     coverage.merge(nutrient, pct * gramFactor, Double::sum));
