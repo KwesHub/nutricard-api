@@ -105,16 +105,7 @@ public class NutrientDataService {
     }
 
     private NutrientData applyCookedCorrection(NutrientData d, CookedCorrection c) {
-        return new NutrientData(
-                c.proteinG(), c.fiberG(), c.energyKcal(), d.fat100g(),
-                d.saturatedFat100g(), d.sugars100g(),
-                d.monounsaturatedFat100g(), d.polyunsaturatedFat100g(),
-                d.vitaminA(), d.vitaminC(), d.vitaminD(), d.vitaminE(), d.vitaminK(),
-                d.vitaminB1(), d.vitaminB2(), d.vitaminB3(), d.vitaminB6(), d.vitaminB12(),
-                d.folate(), d.calcium(), d.iron(), d.magnesium(), d.phosphorus(),
-                d.potassium(), d.zinc(), d.selenium(), d.copper(),
-                d.choline(), d.pantothenicAcid(), d.biotin(), d.manganese(),
-                d.iodine(), d.epa(), d.dha());
+        return d.withProteinEnergyFibre(c.proteinG(), c.energyKcal(), c.fiberG());
     }
 
     private NutrientData fetchByFdcId(int fdcId, String foodName) {
@@ -307,5 +298,16 @@ public class NutrientDataService {
             double iodine,
             double epa,
             double dha
-    ) {}
+    ) {
+        // Copy with three fields replaced. This is the only place the whole record is copied by
+        // position, and NutrientDataServiceTest checks that every other field comes through.
+        NutrientData withProteinEnergyFibre(double protein, double energyKcal, double fibre) {
+            return new NutrientData(protein, fibre, energyKcal, fat100g, saturatedFat100g,
+                    sugars100g, monounsaturatedFat100g, polyunsaturatedFat100g,
+                    vitaminA, vitaminC, vitaminD, vitaminE, vitaminK,
+                    vitaminB1, vitaminB2, vitaminB3, vitaminB6, vitaminB12, folate,
+                    calcium, iron, magnesium, phosphorus, potassium, zinc, selenium, copper,
+                    choline, pantothenicAcid, biotin, manganese, iodine, epa, dha);
+        }
+    }
 }

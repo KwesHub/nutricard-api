@@ -18,11 +18,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
+import java.util.stream.Collectors;
 
 // All the scoring rules live here, so the controllers stay thin.
 @Service
@@ -284,41 +285,60 @@ public class ScoringService {
             TimingContext.NEUTRAL,      new double[]{0.50, 0.35}   // balanced, no workout skew
     ));
 
-    private static final String[] NUTRIENT_NAMES = {
-            "vitaminA", "vitaminC", "vitaminD", "vitaminE", "vitaminK",
-            "vitaminB1", "vitaminB2", "vitaminB3", "vitaminB6", "vitaminB12",
-            "folate", "calcium", "iron", "magnesium", "phosphorus",
-            "potassium", "zinc", "selenium", "copper",
-            "choline", "pantothenicAcid", "biotin", "manganese", "iodine", "epa", "dha"
-    };
-    private static final double[] RDA_VALUES = {
-            900, 90, 20, 15, 120,
-            1.2, 1.3, 16, 1.7, 2.4,
-            400, 1000, 18, 420, 700,
-            3500, 11, 55, 0.9,
-            550, 5, 30, 2.3, 150, 0.5, 0.5
-    };
+    // One row per tracked nutrient: JSON key, daily target (RDA), rarity weight, and how to read it
+    // from the USDA data. Keeping them in one row means they can't fall out of step, unlike the
+    // separate arrays this replaced. Order matters only for the order of the JSON output.
+    // Rarity is a bonus, not a redistribution: shortfall nutrients (under-consumed in typical diets
+    // or concentrated in few foods) count extra, while abundant nutrients keep full baseline weight,
+    // so a food rich in easy-to-get nutrients is never marked down for it.
+    // Tiers: 1.5 rare/shortfall, 1.25 under-consumed, 1.0 everything else.
+    private enum Nutrient {
+        VITAMIN_A("vitaminA", 900, 1.0, NutrientData::vitaminA),
+        VITAMIN_C("vitaminC", 90, 1.0, NutrientData::vitaminC),
+        VITAMIN_D("vitaminD", 20, 1.5, NutrientData::vitaminD),
+        VITAMIN_E("vitaminE", 15, 1.25, NutrientData::vitaminE),
+        VITAMIN_K("vitaminK", 120, 1.25, NutrientData::vitaminK),
+        VITAMIN_B1("vitaminB1", 1.2, 1.0, NutrientData::vitaminB1),
+        VITAMIN_B2("vitaminB2", 1.3, 1.0, NutrientData::vitaminB2),
+        VITAMIN_B3("vitaminB3", 16, 1.0, NutrientData::vitaminB3),
+        VITAMIN_B6("vitaminB6", 1.7, 1.0, NutrientData::vitaminB6),
+        VITAMIN_B12("vitaminB12", 2.4, 1.0, NutrientData::vitaminB12),
+        FOLATE("folate", 400, 1.25, NutrientData::folate),
+        CALCIUM("calcium", 1000, 1.25, NutrientData::calcium),
+        IRON("iron", 18, 1.25, NutrientData::iron),
+        MAGNESIUM("magnesium", 420, 1.25, NutrientData::magnesium),
+        PHOSPHORUS("phosphorus", 700, 1.0, NutrientData::phosphorus),
+        POTASSIUM("potassium", 3500, 1.5, NutrientData::potassium),
+        ZINC("zinc", 11, 1.25, NutrientData::zinc),
+        SELENIUM("selenium", 55, 1.25, NutrientData::selenium),
+        COPPER("copper", 0.9, 1.0, NutrientData::copper),
+        CHOLINE("choline", 550, 1.5, NutrientData::choline),
+        PANTOTHENIC_ACID("pantothenicAcid", 5, 1.0, NutrientData::pantothenicAcid),
+        BIOTIN("biotin", 30, 1.0, NutrientData::biotin),
+        MANGANESE("manganese", 2.3, 1.0, NutrientData::manganese),
+        IODINE("iodine", 150, 1.5, NutrientData::iodine),
+        EPA("epa", 0.5, 1.5, NutrientData::epa),
+        DHA("dha", 0.5, 1.5, NutrientData::dha);
 
-    // Rarity weights, same order as NUTRIENT_NAMES. Rarity is a bonus, not a redistribution:
-    // shortfall nutrients (under-consumed in typical diets or concentrated in few foods) count
-    // extra, while abundant nutrients keep full baseline weight — a food rich in easy-to-get
-    // nutrients is never marked down for it. Tiers: 1.5 rare/shortfall, 1.25 under-consumed,
-    // 1.0 everything else.
-    private static final double[] RARITY_WEIGHTS = {
-            1.0, 1.0, 1.5, 1.25, 1.25,
-            1.0, 1.0, 1.0, 1.0, 1.0,
-            1.25, 1.25, 1.25, 1.25, 1.0,
-            1.5, 1.25, 1.25, 1.0,
-            1.5, 1.0, 1.0, 1.0, 1.5, 1.5, 1.5
-    };
-    private static final Set<String> RARE_NUTRIENTS;
-    static {
-        Set<String> rare = new HashSet<>();
-        for (int i = 0; i < NUTRIENT_NAMES.length; i++) {
-            if (RARITY_WEIGHTS[i] >= 1.25) rare.add(NUTRIENT_NAMES[i]);
+        final String key;
+        final double rda;
+        final double rarity;
+        final ToDoubleFunction<NutrientData> reader;
+
+        Nutrient(String key, double rda, double rarity, ToDoubleFunction<NutrientData> reader) {
+            this.key = key;
+            this.rda = rda;
+            this.rarity = rarity;
+            this.reader = reader;
         }
-        RARE_NUTRIENTS = Set.copyOf(rare);
     }
+
+    private static final Nutrient[] NUTRIENTS = Nutrient.values();
+
+    private static final Set<String> RARE_NUTRIENTS = Arrays.stream(NUTRIENTS)
+            .filter(n -> n.rarity >= 1.25)
+            .map(n -> n.key)
+            .collect(Collectors.toUnmodifiableSet());
 
     // Nutrients the body stores, where the weekly average matters more than any single day:
     //   - fat-soluble vitamins A/D/E/K (adipose and liver stores)
@@ -349,7 +369,8 @@ public class ScoringService {
     // --- Core scoring ---
 
     // No network or DB in here, so the same nutrient data always gives the same score.
-    // It's the easiest part to unit test, and I haven't written those yet.
+    // That makes it easy to test: ScoringServiceTest mocks the USDA client, and ScoringGoldenTest
+    // compares every output field for all foods, so a refactor can't change scores unnoticed.
     private NutritionScore calculateFromRealData(Food food, NutrientData data) {
         NutritionScore score = new NutritionScore();
         score.setFood(food);
@@ -378,22 +399,15 @@ public class ScoringService {
             kcal = 100.0;
         }
         double perKcalScale = 100.0 / kcal;
-        double[] nutrientValues = {
-                data.vitaminA(), data.vitaminC(), data.vitaminD(), data.vitaminE(), data.vitaminK(),
-                data.vitaminB1(), data.vitaminB2(), data.vitaminB3(), data.vitaminB6(), data.vitaminB12(),
-                data.folate(), data.calcium(), data.iron(), data.magnesium(), data.phosphorus(),
-                data.potassium(), data.zinc(), data.selenium(), data.copper(),
-                data.choline(), data.pantothenicAcid(), data.biotin(), data.manganese(),
-                data.iodine(), data.epa(), data.dha()
-        };
         // Coverage stays capped at 1.0 per nutrient inside the score (mega-doses shouldn't
         // multiply it); the uncapped per-100g percentages are surfaced in microBreakdown instead.
         double weightedCoverageSum = 0;
-        double[] pctRdaPer100g = new double[nutrientValues.length];
-        for (int i = 0; i < nutrientValues.length; i++) {
-            double coverage = Math.min(nutrientValues[i] * perKcalScale / RDA_VALUES[i], 1.0);
-            weightedCoverageSum += coverage * RARITY_WEIGHTS[i];
-            pctRdaPer100g[i] = nutrientValues[i] / RDA_VALUES[i] * 100.0;
+        double[] pctRdaPer100g = new double[NUTRIENTS.length];
+        for (int i = 0; i < NUTRIENTS.length; i++) {
+            double value = NUTRIENTS[i].reader.applyAsDouble(data);
+            double coverage = Math.min(value * perKcalScale / NUTRIENTS[i].rda, 1.0);
+            weightedCoverageSum += coverage * NUTRIENTS[i].rarity;
+            pctRdaPer100g[i] = value / NUTRIENTS[i].rda * 100.0;
         }
 
         // 1.31 is a tuning number, not derived: it puts peanut butter at about 58.8.
@@ -439,7 +453,7 @@ public class ScoringService {
         score.setEnergyProfileNeutral(round(energyProfile));
 
         // Breakdowns are JSON strings in TEXT columns. Easy to change, but types.ts has to be kept
-        // in step by hand, and it's already behind on EnergyBreakdown (type drift).
+        // in step by hand, and nothing checks it, so the two can drift (it did once).
         score.setProteinBreakdown(String.format(
                 "{\"rawProteinG\":%.2f,\"pdcaas\":%.2f,\"completenessFactor\":%.2f,\"bioavailability\":%.2f}",
                 data.proteins100g(), pdcaas, completeness, bioavailability));
@@ -634,13 +648,13 @@ public class ScoringService {
             int i = indices[rank];
             if (pctRdaPer100g[i] <= 0) break;
             ObjectNode entry = top.addObject();
-            entry.put("name", NUTRIENT_NAMES[i]);
+            entry.put("name", NUTRIENTS[i].key);
             entry.put("pctRda", round1(pctRdaPer100g[i]));
-            entry.put("rare", isRareNutrient(NUTRIENT_NAMES[i]));
+            entry.put("rare", isRareNutrient(NUTRIENTS[i].key));
         }
         ObjectNode coverages = json.putObject("coverages");
         for (int i = 0; i < pctRdaPer100g.length; i++) {
-            coverages.put(NUTRIENT_NAMES[i], round1(pctRdaPer100g[i]));
+            coverages.put(NUTRIENTS[i].key, round1(pctRdaPer100g[i]));
         }
         return json.toString();
     }
