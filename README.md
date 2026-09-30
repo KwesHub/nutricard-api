@@ -1,8 +1,14 @@
 # NutriCard
 
+[![CI](https://github.com/KwesHub/nutricard-api/actions/workflows/ci.yml/badge.svg)](https://github.com/KwesHub/nutricard-api/actions/workflows/ci.yml)
+
 A nutrition API that treats food like a football card.
 
-Every food gets a stat card: Protein Quality, Micronutrient Density, Energy Profile, Gut Health, and Phytonutrients. No food scores zero across the board. No food scores 100 either. That's the point.
+Every food gets a stat card: Protein Quality, Micronutrient Density, Energy Profile, Gut Health, and Phytonutrients. No food scores zero across the board, and none scores 100 across it either. That's the point.
+
+The React frontend lives in [nutricard-frontend](https://github.com/KwesHub/nutricard-frontend).
+
+<!-- Add the live demo links here once confirmed: frontend (Vercel) and API (Railway). -->
 
 ---
 
@@ -22,82 +28,68 @@ NutriCard is built around one idea: no food is inherently good or bad. Different
 
 ## What it does
 
-**Food cards.** Each food gets scored across five stats using real data from the USDA FoodData Central database. The scores reflect nutritional reality, sardines score high on protein and micronutrients, low on gut health, because sardines have no fibre. That's accurate, not a bug.
+### Food cards
 
-**Food roles.** Foods are assigned a role based on how they fit into a diet:
-- **Daily Driver** - foundation foods you eat regularly (oats, sweet potato, eggs)
-- **Weekly Anchor** - nutrient-dense foods with a natural ceiling (sardines, mackerel, liver)
-- **Booster** - foods that enhance the nutrition of everything around them (lemon juice, black pepper, fermented foods)
-- **Pantry** - small serving, big impact (garlic, onions, ginger, turmeric)
-- **Occasional** - fine in context, not a daily staple
+There are 41 foods. Each is scored from 0 to 100 on five stats, using per-100g data from the USDA FoodData Central database.
 
-**Meal builder.** Combine foods into a meal and get a combined nutrition card. The scores are weighted by how many grams of each food you're using, 150g of sardines contributes more to the meal card than 10g of garlic.
+- **Protein Quality:** half the score is how much protein there is (22g per 100g earns the full half), the other half is how good it is, using PDCAAS and how complete the amino acids are.
+- **Micronutrient Density:** how much of the daily target 26 vitamins and minerals cover per 100 kcal. Nutrients that are hard to get from a typical diet, such as vitamin D, potassium, choline and EPA/DHA, count for extra. Measuring per calorie stops peanut butter winning just because it is dense.
+- **Energy Profile:** how well the food suits a moment, judged on two things: how fast it leaves the stomach (fat, fibre and protein slow it down) and how fast it raises blood sugar (glycaemic index).
+- **Gut Health:** fibre, plus a bonus for prebiotic foods and for the omega-3s in oily fish, minus a penalty for anti-nutrients.
+- **Phytonutrients:** a value I set by hand for each food.
 
-**Synergy engine.** Some food combinations genuinely work better together. The API detects these and flags them:
-- Sardines or mackerel with garlic or onion: Omega-3 + Allicin anti-inflammatory combination
-- Oats with kiwi, lemon, or orange: Vitamin C reduces the phytic acid effect and improves mineral absorption
-- Spinach with lemon or kiwi: Vitamin C improves iron absorption from plant sources
-- High protein food with high fibre food: sustained energy and satiety
+The overall score takes the best four stats, weighted 50/30/15/5, and ignores the lowest. A food is not marked down for something it was never meant to do. Sardines have no fibre, and that is fine.
 
-**Timing context.** A meal can be scored for a specific context: morning, pre-workout, post-workout, or evening. The same meal scores differently depending on when you eat it, because your nutritional needs shift throughout the day. Post-workout, protein matters more. Evening, gut health and micronutrients take priority.
+Each card also carries a standout fact, a badge for any nutrient where 100g covers at least half the daily target, and "watch" badges for things like phytates, oxalates and lectins, with a note on how to reduce them. A few foods have a "cap" badge, for example Brazil nuts (max 2 a day, because of the selenium).
 
----
+### Food roles
 
-## Tech stack
+Every food has one of five roles:
 
-- Java 21
-- Spring Boot 3.3
-- PostgreSQL 17
-- Spring Data JPA
-- USDA FoodData Central API
+- **Eat daily:** oats, eggs, spinach, lentils, sweet potato
+- **2-3 times a week:** sardines, salmon, beef mince
+- **Small boost:** nuts, seeds, berries, peanut butter
+- **Flavour staple:** garlic, lemon, olive oil, tahini
+- **Treat:** honey, dark chocolate
 
----
+Flavour staples and treats have no timing grades, because nobody eats garlic for breakfast.
 
-## Running it locally
+### Timing
 
-You need Java 21, Maven, and PostgreSQL installed.
+Foods and meals are scored for five contexts: morning, pre-workout, post-workout, evening and anytime. Each context has its own ideal on the two energy axes and its own weighting of the five stats. A low-fat, high-GI food like white rice grades well before a workout. A high-fibre food like oats does not.
 
-**1. Clone the repo**
-```bash
-git clone https://github.com/KwesHub/nutricard-api.git
-cd nutricard-api
-```
+### Meals
 
-**2. Create the database**
-```bash
-psql -U postgres
-CREATE DATABASE nutricard_db;
-\q
-```
+`POST /meals` takes a list of foods with grams and a timing context.
 
-**3. Set your USDA API key**
+- The stats are averaged by weight, so 150g of sardines counts for more than 10g of garlic. The overall score is the weighted average of each food's score for that context.
+- Some combinations are flagged: oily fish with garlic or onion, oats or spinach with a vitamin C food, tomato with a fat, and a high-protein food with a high-fibre one.
+- Any nutrient the whole meal covers at under 10% of the daily target is listed as a gap. Storable nutrients (for example fat-soluble vitamins, B12, omega-3, calcium, iron and zinc) are marked weekly, because their weekly average matters more than any one day. Up to three foods that would fill the gaps are suggested.
 
-Get a free key at https://fdc.nal.usda.gov/api-key-signup.html
+### Compare
 
-```bash
-export USDA_API_KEY=your_key_here
-```
+`GET /foods/compare?a=1&b=2` returns the winner on each stat, the nutrients one food has and the other barely does, and the nutrients both have where one has at least 1.5 times as much.
 
-**4. Run**
-```bash
-mvn spring-boot:run
-```
+### How far to trust the numbers
 
-The app seeds three foods on startup (Sardines, Oats, Garlic) with real USDA data. On first run you'll see the tables being created and scores being calculated.
+Nutrient amounts come from USDA. Several inputs do not: amino-acid completeness, bioavailability, glycaemic index, prebiotic and anti-nutrient values, the phytonutrient score and the synergy score are values I chose per food. The micronutrient formula is divided by a constant (1.31) picked so that peanut butter scores about 58.8. The scores rank foods against each other. They are not clinical measurements.
 
 ---
 
-## Endpoints
+## API
 
 ```
-GET  /foods                          List all foods
-GET  /foods/{id}                     Get a food by ID
-GET  /foods/{id}/card                Get a food's full nutrition card
-POST /meals                          Create a meal from a list of foods
-GET  /meals/{id}/card                Get a meal's combined nutrition card
+GET  /foods                           List all foods with their badges (optional ?search=)
+GET  /foods/{id}/card                 A food's full card (scores, breakdowns, timing grades, insights)
+GET  /foods/compare?a={id}&b={id}     Head-to-head comparison of two foods
+POST /meals                           Score a meal built from foods and grams
+GET  /meals/{id}/card                 A saved meal's card
 ```
 
-**Example: Create a meal**
+Interactive docs are at `/swagger-ui.html`, and the OpenAPI JSON is at `/api-docs`.
+
+**Example: create a meal** (on a freshly seeded database, IDs 1 to 3 are Sardines, Oats and Garlic)
+
 ```bash
 curl -X POST http://localhost:8080/meals \
   -H "Content-Type: application/json" \
@@ -112,17 +104,78 @@ curl -X POST http://localhost:8080/meals \
   }'
 ```
 
+An invalid meal gets a 400 that names the field, for example `{"error":"Invalid request","fields":{"foods":"must not be empty"}}`. A food with no saved score, when USDA cannot be reached, gets a 503.
+
 ---
 
-## What's coming
+## Tech stack
 
-- Food search endpoint
-- Food comparison (head-to-head stat breakdown)
-- Anti-nutrient modifiers (phytic acid, oxalates, tannins affecting bioavailability scores)
-- Fat-soluble vitamin meal modifier (fat present in the meal improves absorption of vitamins A, D, E, K)
-- Culinary scoring layer (Salt, Acid, Fat, Heat, Umami — how well a meal is composed from a cooking standpoint)
-- Food detail pages with prep notes, callouts, and suggested meals
-- Frontend
+Java 21, Spring Boot 3.3, Spring Data JPA (Hibernate), PostgreSQL, Spring WebClient for the USDA API, springdoc for Swagger, Maven and Docker. Tests use JUnit 5, Mockito and an in-memory H2 database.
+
+## How it's put together
+
+Controllers only route requests. `FoodService` and `MealService` hold the request logic, `ScoringService` holds the scoring rules, and `NutrientDataService` talks to USDA. `NutritionScoreService` is the single place that returns a food's saved score or computes and saves it.
+
+Scores are computed once, from USDA data, and saved. A score that fails to save because another thread saved the same food first takes the other thread's row.
+
+On startup, `DataSeeder` runs a set of SQL migrations that drop scores made by older scoring logic, seeds any missing foods, and rescores in a background thread.
+
+---
+
+## Running it locally
+
+You need Java 21, PostgreSQL and a free USDA API key ([sign up here](https://fdc.nal.usda.gov/api-key-signup.html)).
+
+```bash
+git clone https://github.com/KwesHub/nutricard-api.git
+cd nutricard-api
+createdb nutricard_db
+export USDA_API_KEY=your_key_here
+./mvnw spring-boot:run
+```
+
+The app reads its configuration from environment variables:
+
+| Variable | Default |
+|---|---|
+| `PGHOST`, `PGPORT`, `PGDATABASE` | `localhost`, `5432`, `nutricard_db` |
+| `PGUSER`, `PGPASSWORD` | `eka` and empty. Set `PGUSER` to your own database user |
+| `USDA_API_KEY` | none |
+| `PORT` | `8080` |
+| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:5174` |
+
+On an empty database the first start seeds 41 foods and scores each one by calling USDA, so it takes a little while.
+
+## Tests
+
+```bash
+./mvnw test
+```
+
+The 59 tests need no database and no USDA key. They cover the scoring rules, meal scoring, request validation, the USDA-outage behaviour, a race between two threads saving the same score, and a check that every food-name key in the scoring tables matches a real food. `ScoringGoldenTest` compares every output field for every food against a saved file, so a refactor cannot change a score without a test failing. GitHub Actions runs them on every push.
+
+## Deployment
+
+The Dockerfile builds the jar in one stage and runs it on a JRE in the next. The API runs on Railway with a managed Postgres, and the frontend runs on Vercel. `CORS_ORIGINS` has to include the frontend's URL.
+
+---
+
+## Known limitations
+
+- **USDA dependency.** The first request for a food needs USDA to be reachable. If it is down and the food has no saved score, the API returns 503. Sardines, Oats and Garlic fall back to built-in values instead. The raw USDA data is not stored, so rescoring needs the API again.
+- **Some USDA entries are dry weights.** I corrected green lentils to cooked values. White rice and red lentils probably have the same problem.
+- **Schema changes.** Hibernate creates the tables (`ddl-auto=update`), and scoring changes go out as SQL migrations at startup. A tool such as Flyway would be safer.
+- **Validation and security.** Only `POST /meals` validates its input. There is no authentication and no rate limiting.
+
+## What's next
+
+- A fat-soluble vitamin modifier (vitamins A, D, E and K absorb better with fat in the meal)
+- Explanations for terms like PDCAAS and glycaemic index in the UI
+- Fibre types and plant variety in meal scoring
+- Calorie goals (cut, maintain, bulk) on the calorie calculator
+- Flavour profiles (salt, acid, fat, heat, umami) and meal suggestions that make culinary sense
+- A day planner and dietary profiles (vegetarian, vegan and so on)
+- More foods, such as chickpeas, tofu, kefir and almonds
 
 ---
 
