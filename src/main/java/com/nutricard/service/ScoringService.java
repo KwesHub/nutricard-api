@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.ToDoubleFunction;
@@ -187,7 +188,8 @@ public class ScoringService {
             Map.entry("Walnuts", 70.0), Map.entry("Cottage cheese", 58.0),
             Map.entry("Flaxseed", 62.0), Map.entry("Chia seeds", 65.0),
             Map.entry("Sweet corn", 55.0), Map.entry("Bell pepper", 85.0),
-            Map.entry("Tomato", 88.0), Map.entry("Brazil nuts", 50.0)
+            Map.entry("Tomato", 88.0), Map.entry("Brazil nuts", 50.0),
+            Map.entry("Apple", 40.0)
     );
 
     // Curated educational one-liners — shown on the food card when present. Not persisted;
@@ -225,6 +227,7 @@ public class ScoringService {
             Map.entry("Spinach", "High in oxalates, which bind its own calcium and iron — pair with vitamin-C foods to offset."),
             Map.entry("Black beans", "Phytates and lectins — well cooked, most are neutralised, and the fibre benefit far outweighs the rest."),
             Map.entry("Walnuts", "Contain some phytic acid — light toasting or soaking reduces it."),
+            Map.entry("Brazil nuts", "Contain some phytic acid — light toasting or soaking reduces it."),
             Map.entry("Flaxseed", "Contains phytates and cyanogenic glycosides — harmless at normal intakes of 1–2 tablespoons a day."),
             Map.entry("Chia seeds", "Contain some phytic acid — negligible at typical serving sizes."),
             Map.entry("Broccoli", "Raw broccoli contains goitrogens that can interfere with iodine uptake — cooking largely deactivates them.")
@@ -240,6 +243,7 @@ public class ScoringService {
             Map.entry("Spinach", "Oxalates"),
             Map.entry("Black beans", "Phytates"),
             Map.entry("Walnuts", "Phytates"),
+            Map.entry("Brazil nuts", "Phytates"),
             Map.entry("Flaxseed", "Phytates"),
             Map.entry("Chia seeds", "Phytates"),
             Map.entry("Broccoli", "Goitrogens (raw)")
@@ -454,14 +458,14 @@ public class ScoringService {
 
         // Breakdowns are JSON strings in TEXT columns. Easy to change, but types.ts has to be kept
         // in step by hand, and nothing checks it, so the two can drift (it did once).
-        score.setProteinBreakdown(String.format(
+        score.setProteinBreakdown(String.format(Locale.ROOT,
                 "{\"rawProteinG\":%.2f,\"pdcaas\":%.2f,\"completenessFactor\":%.2f,\"bioavailability\":%.2f}",
                 data.proteins100g(), pdcaas, completeness, bioavailability));
-        score.setEnergyBreakdown(String.format(
+        score.setEnergyBreakdown(String.format(Locale.ROOT,
                 "{\"fibreG\":%.2f,\"gi\":%d,\"sugarsG\":%.2f,\"unsaturatedRatio\":%.2f,\"stomachSpeed\":%.2f,\"bloodSpeed\":%.2f}",
                 data.fiber100g(), gi, data.sugars100g(), unsaturatedRatio,
                 stomachSpeed(data), bloodSpeed(data, name)));
-        score.setGutBreakdown(String.format(
+        score.setGutBreakdown(String.format(Locale.ROOT,
                 "{\"fibreG\":%.2f,\"prebioticBonus\":%d,\"antiNutrientPenalty\":%d,\"omega3Bonus\":%.1f}",
                 data.fiber100g(), prebioticBonus, antiNutrientPenalty, omega3Bonus));
         score.setMicroBreakdown(buildMicroBreakdown(pctRdaPer100g));
@@ -471,7 +475,7 @@ public class ScoringService {
         boolean first = true;
         for (Map.Entry<String, Double> e : timingScores.entrySet()) {
             if (!first) tsJson.append(",");
-            tsJson.append(String.format("\"%s\":%.2f", e.getKey(), e.getValue()));
+            tsJson.append(String.format(Locale.ROOT, "\"%s\":%.2f", e.getKey(), e.getValue()));
             first = false;
         }
         tsJson.append("}");
