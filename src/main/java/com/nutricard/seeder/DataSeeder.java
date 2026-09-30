@@ -2,10 +2,8 @@ package com.nutricard.seeder;
 
 import com.nutricard.model.Food;
 import com.nutricard.model.FoodRole;
-import com.nutricard.model.NutritionScore;
 import com.nutricard.repository.FoodRepository;
-import com.nutricard.repository.NutritionScoreRepository;
-import com.nutricard.service.ScoringService;
+import com.nutricard.service.NutritionScoreService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,8 +21,7 @@ public class DataSeeder implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
 
     private final FoodRepository foodRepository;
-    private final NutritionScoreRepository nutritionScoreRepository;
-    private final ScoringService scoringService;
+    private final NutritionScoreService nutritionScoreService;
     private final JdbcTemplate jdbcTemplate;
 
     @Override
@@ -47,10 +44,8 @@ public class DataSeeder implements CommandLineRunner {
         Thread warmup = new Thread(() -> {
             int computed = 0;
             for (Food food : foodRepository.findAll()) {
-                if (nutritionScoreRepository.findByFoodId(food.getId()).isPresent()) continue;
                 try {
-                    nutritionScoreRepository.save(scoringService.calculateScores(food));
-                    computed++;
+                    if (nutritionScoreService.computeIfMissing(food)) computed++;
                 } catch (Exception e) {
                     log.warn("Score warm-up failed for '{}': {}", food.getName(), e.getMessage());
                 }
@@ -196,8 +191,7 @@ public class DataSeeder implements CommandLineRunner {
         foods.add(createFood("Brazil nuts", "NUT", FoodRole.BOOSTER, 10));
 
         for (Food food : foods) {
-            NutritionScore score = scoringService.calculateScores(food);
-            nutritionScoreRepository.save(score);
+            nutritionScoreService.computeIfMissing(food);
         }
     }
 
@@ -224,8 +218,7 @@ public class DataSeeder implements CommandLineRunner {
                 "SELECT COUNT(*) FROM foods WHERE name = ?", Integer.class, name);
         if (count == null || count == 0) {
             Food food = createFood(name, category, role, servingSizeG);
-            NutritionScore score = scoringService.calculateScores(food);
-            nutritionScoreRepository.save(score);
+            nutritionScoreService.computeIfMissing(food);
         }
     }
 

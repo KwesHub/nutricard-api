@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
-@Import(FoodService.class)
+@Import({FoodService.class, NutritionScoreService.class})
 class FoodServiceJpaTest {
 
     private static final String TIMING = "{\"MORNING\":50.0,\"NEUTRAL\":60.0}";

@@ -37,6 +37,7 @@ public class FoodService {
 
     private final FoodRepository foodRepository;
     private final NutritionScoreRepository nutritionScoreRepository;
+    private final NutritionScoreService nutritionScoreService;
     private final ScoringService scoringService;
     private final EntityManager entityManager;
 
@@ -59,11 +60,7 @@ public class FoodService {
         Food food = foodRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Food not found"));
 
-        NutritionScore score = nutritionScoreRepository.findByFoodId(food.getId())
-                .orElseGet(() -> {
-                    NutritionScore calculated = scoringService.calculateScores(food);
-                    return nutritionScoreRepository.save(calculated);
-                });
+        NutritionScore score = nutritionScoreService.getOrCompute(food);
 
         if (food.getFoodRole() == FoodRole.PANTRY || food.getFoodRole() == FoodRole.OCCASIONAL) {
             // Response-only null: detach first, or JPA dirty checking flushes the null to the
@@ -87,10 +84,8 @@ public class FoodService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Food with ID " + b + " not found"));
 
-        NutritionScore scoreA = nutritionScoreRepository.findByFoodId(a)
-                .orElseGet(() -> nutritionScoreRepository.save(scoringService.calculateScores(foodA)));
-        NutritionScore scoreB = nutritionScoreRepository.findByFoodId(b)
-                .orElseGet(() -> nutritionScoreRepository.save(scoringService.calculateScores(foodB)));
+        NutritionScore scoreA = nutritionScoreService.getOrCompute(foodA);
+        NutritionScore scoreB = nutritionScoreService.getOrCompute(foodB);
 
         Map<String, String> winners = new LinkedHashMap<>();
         winners.put("proteinQuality", pickWinner(scoreA.getProteinQuality(), scoreB.getProteinQuality(), foodA.getName(), foodB.getName()));

@@ -35,7 +35,8 @@ class MealScoringServiceTest {
     private final NutritionScoreRepository scores = mock(NutritionScoreRepository.class);
     // spy so a test can replace calculateScores while the JSON parsing stays real
     private final ScoringService scoring = spy(new ScoringService(mock(NutrientDataService.class)));
-    private final MealScoringService service = new MealScoringService(mealFoods, scores, scoring);
+    private final NutritionScoreService scoreService = new NutritionScoreService(scores, scoring);
+    private final MealScoringService service = new MealScoringService(mealFoods, scores, scoring, scoreService);
 
     private Food food(long id, String name) {
         Food f = new Food();

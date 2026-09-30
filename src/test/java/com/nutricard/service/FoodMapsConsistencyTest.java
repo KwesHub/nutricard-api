@@ -2,7 +2,6 @@ package com.nutricard.service;
 
 import com.nutricard.model.Food;
 import com.nutricard.repository.FoodRepository;
-import com.nutricard.repository.NutritionScoreRepository;
 import com.nutricard.seeder.DataSeeder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -37,12 +36,12 @@ class FoodMapsConsistencyTest {
         when(foods.count()).thenReturn(0L);
         when(foods.save(any(Food.class))).thenAnswer(inv -> inv.getArgument(0));
         when(foods.findAll()).thenReturn(List.of());
-        ScoringService scoring = mock(ScoringService.class);
+        NutritionScoreService scoreService = mock(NutritionScoreService.class);
 
-        new DataSeeder(foods, mock(NutritionScoreRepository.class), scoring, mock(JdbcTemplate.class)).run();
+        new DataSeeder(foods, scoreService, mock(JdbcTemplate.class)).run();
 
         ArgumentCaptor<Food> captor = ArgumentCaptor.forClass(Food.class);
-        verify(scoring, atLeastOnce()).calculateScores(captor.capture());
+        verify(scoreService, atLeastOnce()).computeIfMissing(captor.capture());
         seeded = new HashSet<>();
         captor.getAllValues().forEach(f -> seeded.add(f.getName()));
     }

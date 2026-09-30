@@ -13,7 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +30,7 @@ public class MealScoringService {
     private final MealFoodRepository mealFoodRepository;
     private final NutritionScoreRepository nutritionScoreRepository;
     private final ScoringService scoringService;
+    private final NutritionScoreService nutritionScoreService;
 
     public MealScore calculateMealScore(Meal meal) {
         List<MealFood> mealFoods = mealFoodRepository.findByMealId(meal.getId());
@@ -94,17 +94,9 @@ public class MealScoringService {
         return mealScore;
     }
 
-    // One query for all of the meal's scores instead of one per food. A food with no saved score
-    // is computed and saved here, the same as FoodService.getCard does.
+    // One query for all of the meal's scores; a food with no saved score is computed and saved.
     private Map<Long, NutritionScore> scoresFor(List<MealFood> mealFoods) {
-        List<Long> foodIds = mealFoods.stream().map(mf -> mf.getFood().getId()).distinct().toList();
-        Map<Long, NutritionScore> byFoodId = nutritionScoreRepository.findByFoodIdIn(foodIds).stream()
-                .collect(Collectors.toMap(s -> s.getFood().getId(), s -> s));
-        for (MealFood mealFood : mealFoods) {
-            byFoodId.computeIfAbsent(mealFood.getFood().getId(),
-                    id -> nutritionScoreRepository.save(scoringService.calculateScores(mealFood.getFood())));
-        }
-        return byFoodId;
+        return nutritionScoreService.getOrComputeAll(mealFoods.stream().map(MealFood::getFood).toList());
     }
 
     // --- Nutrient gap analysis ---
