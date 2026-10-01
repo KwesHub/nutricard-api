@@ -602,8 +602,14 @@ public class ScoringService {
     // (empty coverages) yields no strength badges rather than an error.
     public List<Badge> deriveBadges(NutritionScore score, String foodName) {
         List<Badge> badges = new ArrayList<>();
+        List<Badge> claims = score != null ? claimBadges(score) : List.of();
+        // Fibre always shows as the "High fibre" claim, and EPA/DHA as "High omega-3" when it
+        // qualifies, so they're left out of the nutrient chips to avoid saying it twice.
+        boolean omega3Claim = claims.stream().anyMatch(b -> b.label().equals(HIGH_OMEGA3_LABEL));
         if (score != null) {
             parseCoverages(score).entrySet().stream()
+                    .filter(e -> !e.getKey().equals("fibre"))
+                    .filter(e -> !(omega3Claim && (e.getKey().equals("epa") || e.getKey().equals("dha"))))
                     .filter(e -> e.getValue() >= (isRareNutrient(e.getKey()) ? BADGE_MIN_PCT_RDA_RARE : BADGE_MIN_PCT_RDA))
                     .sorted(Comparator
                             .comparing((Map.Entry<String, Double> e) -> !isRareNutrient(e.getKey()))
@@ -613,8 +619,10 @@ public class ScoringService {
                             ? new Badge(e.getKey(), "rare", RARE_BADGE_DETAIL)
                             : new Badge(e.getKey(), "strength", null)));
         }
-        if (score != null) {
-            badges.addAll(fatBadges(score));
+        badges.addAll(claims);
+        Compound compound = PLANT_COMPOUNDS.get(foodName);
+        if (compound != null) {
+            badges.add(new Badge(compound.label(), "compound", compound.detail()));
         }
         String watch = ANTI_NUTRIENT_BADGES.get(foodName);
         if (watch != null) {
@@ -646,40 +654,102 @@ public class ScoringService {
         }
     }
 
-    // Fat standouts sit outside the RDA scoring: omega-9 has no RDA (the body makes it) and ALA's
-    // value depends on context, so they are labelled strengths, not scored.
-    private static final double MUFA_BADGE_MIN_G = 5.0;
-    private static final double MUFA_BADGE_MIN_SHARE = 0.40;
-    // and at least twice the saturated fat, so beef (about as much saturated as omega-9) doesn't qualify
-    private static final double MUFA_BADGE_MIN_RATIO_TO_SATURATED = 2.0;
-    private static final double ALA_BADGE_MIN_G = 2.0;
-    private static final String MUFA_BADGE_DETAIL =
+    // Claim badges use the legal definitions for nutrition claims in Regulation (EC) 1924/2006,
+    // Annex (retained in UK law), so "high protein" means what it means on a food label:
+    //   high protein        at least 20% of energy from protein (plus our own 5g/100g minimum, or
+    //                       spinach would qualify on its 2.9g because it has so few calories)
+    //   high fibre          at least 6g per 100g, or 3g per 100 kcal (plus at least 3g per 100g, the
+    //                       EU 'source of fibre' level, or a tomato's 1.2g would qualify per calorie)
+    //   high omega-3        at least 80mg EPA+DHA per 100g and per 100 kcal (or 0.6g ALA, shown
+    //                       as an info chip because the body converts little of it)
+    //   high monounsaturated at least 45% of fatty acids, and more than 20% of energy
+    private static final String HIGH_OMEGA3_LABEL = "High omega-3 (EPA + DHA)";
+    private static final double CLAIM_MIN_PROTEIN_G = 5.0;
+    private static final double CLAIM_MIN_FIBRE_G = 3.0;
+    private static final String HIGH_PROTEIN_DETAIL =
+            "Over 20% of its calories come from protein, the legal bar for a 'high protein' label claim.";
+    private static final String HIGH_FIBRE_DETAIL =
+            "At least 6g of fibre per 100g (or 3g per 100 kcal), the legal bar for a 'high fibre' claim. Most people eat well under the 30g a day the NHS advises.";
+    private static final String HIGH_OMEGA3_DETAIL =
+            "Meets the legal bar for 'high omega-3' with the EPA and DHA your body uses directly, the main reason oily fish is recommended twice a week.";
+    private static final String HIGH_MUFA_DETAIL =
             "Mostly oleic acid (omega-9), the main fat in olive oil. Not essential, since your body makes it, but eating it in place of saturated fat improves blood cholesterol.";
     private static final String ALA_BADGE_DETAIL =
             "ALA is essential in its own right, but your body converts only around 5 to 10% of it into EPA and very little into DHA, the omega-3s oily fish provide. Good to have; not a substitute for fish.";
 
-    private List<Badge> fatBadges(NutritionScore score) {
-        if (score.getMicroBreakdown() == null) return List.of();
+    private List<Badge> claimBadges(NutritionScore score) {
+        Double kcalBoxed = score.getKcalPer100g();
+        if (kcalBoxed == null || kcalBoxed <= 0 || score.getMicroBreakdown() == null) return List.of();
+        double kcal = kcalBoxed;
         try {
-            JsonNode json = MAPPER.readTree(score.getMicroBreakdown());
-            double fat = json.path("fatG").asDouble(0);
-            double mufa = json.path("monounsaturatedFatG").asDouble(0);
-            double ala = json.path("alaG").asDouble(0);
-            double saturated = json.path("saturatedFatG").asDouble(0);
+            JsonNode micro = MAPPER.readTree(score.getMicroBreakdown());
+            double protein = score.getProteinBreakdown() == null ? 0
+                    : MAPPER.readTree(score.getProteinBreakdown()).path("rawProteinG").asDouble(0);
+            double fibre = score.getGutBreakdown() == null ? 0
+                    : MAPPER.readTree(score.getGutBreakdown()).path("fibreG").asDouble(0);
+            double mufa = micro.path("monounsaturatedFatG").asDouble(0);
+            double fattyAcids = micro.path("saturatedFatG").asDouble(0) + mufa
+                    + micro.path("polyunsaturatedFatG").asDouble(0);
+            double ala = micro.path("alaG").asDouble(0);
+            JsonNode cov = micro.path("coverages");
+            // coverages are %RDA per 100g; EPA and DHA each have a 0.5g target
+            double epaDha = (cov.path("epa").asDouble(0) + cov.path("dha").asDouble(0)) / 100.0 * 0.5;
+            double per100kcal = 100.0 / kcal;
+
             List<Badge> out = new ArrayList<>();
-            if (mufa >= MUFA_BADGE_MIN_G && fat > 0 && mufa / fat >= MUFA_BADGE_MIN_SHARE
-                    && mufa >= saturated * MUFA_BADGE_MIN_RATIO_TO_SATURATED) {
-                out.add(new Badge("Omega-9 fats", "strength", MUFA_BADGE_DETAIL));
+            if (protein >= CLAIM_MIN_PROTEIN_G && protein * 4 / kcal >= 0.20) {
+                out.add(new Badge("High protein", "strength", HIGH_PROTEIN_DETAIL));
             }
-            if (ala >= ALA_BADGE_MIN_G) {
+            if (fibre >= CLAIM_MIN_FIBRE_G && (fibre >= 6 || fibre * per100kcal >= 3)) {
+                out.add(new Badge("High fibre", "rare", HIGH_FIBRE_DETAIL));
+            }
+            if (epaDha >= 0.08 && epaDha * per100kcal >= 0.08) {
+                out.add(new Badge(HIGH_OMEGA3_LABEL, "strength", HIGH_OMEGA3_DETAIL));
+            } else if (ala >= 0.6 && ala * per100kcal >= 0.6) {
                 out.add(new Badge("Plant omega-3 (low conversion)", "info", ALA_BADGE_DETAIL));
+            }
+            if (fattyAcids > 0 && mufa / fattyAcids >= 0.45 && mufa * 9 / kcal > 0.20) {
+                out.add(new Badge("High monounsaturated fat", "strength", HIGH_MUFA_DETAIL));
             }
             return out;
         } catch (Exception e) {
-            log.warn("Could not parse fat profile for score {}: {}", score.getId(), e.getMessage());
+            log.warn("Could not parse breakdowns for claim badges, score {}: {}", score.getId(), e.getMessage());
             return List.of();
         }
     }
+
+    // Plant compounds a food is known for. Hand-written because no single database covers them,
+    // but every figure is sourced: carotenoids from USDA FoodData Central (the FDC entries this app
+    // uses), polyphenol classes from Phenol-Explorer (summed by class, chromatography), the rest
+    // from published studies. Only foods where the compound is genuinely notable are listed.
+    private record Compound(String label, String detail) {}
+
+    private static final Map<String, Compound> PLANT_COMPOUNDS = Map.ofEntries(
+            Map.entry("Blueberries", new Compound("Anthocyanins",
+                    "About 130 to 165mg per 100g (Phenol-Explorer). These blue-purple pigments are among the most studied plant compounds for brain and blood-vessel health.")),
+            Map.entry("Dark chocolate 70%", new Compound("Cocoa flavanols",
+                    "About 1,500mg of flavanols and procyanidins per 100g (Phenol-Explorer), studied for blood pressure and blood-vessel function.")),
+            Map.entry("Flaxseed", new Compound("Lignans",
+                    "About 280mg per 100g (Phenol-Explorer), the richest common source. Lignans are plant compounds with weak oestrogen-like activity.")),
+            Map.entry("Tomato", new Compound("Lycopene",
+                    "About 2.6mg per 100g raw (USDA). Cooking with a little oil makes more of it available.")),
+            Map.entry("Spinach", new Compound("Lutein",
+                    "About 12mg of lutein and zeaxanthin per 100g (USDA), the pigments that collect in the retina.")),
+            Map.entry("Peas", new Compound("Lutein",
+                    "About 2.6mg of lutein and zeaxanthin per 100g (USDA), the pigments that collect in the retina.")),
+            Map.entry("Sweet potato", new Compound("Beta-carotene",
+                    "About 8.5mg per 100g (USDA), which your body turns into vitamin A.")),
+            Map.entry("Bell pepper", new Compound("Beta-carotene",
+                    "About 1.6mg per 100g in red peppers (USDA), which your body turns into vitamin A.")),
+            Map.entry("Broccoli", new Compound("Sulforaphane",
+                    "Broccoli holds glucoraphanin, which turns into sulforaphane when it's chopped or chewed. Heavy boiling destroys the enzyme that makes this happen.")),
+            Map.entry("Garlic", new Compound("Allicin",
+                    "Crushed garlic yields about 2.5 to 4.5mg of allicin per gram. Letting it rest 10 minutes after crushing gives it time to form.")),
+            Map.entry("Ginger", new Compound("Gingerols",
+                    "The compounds behind fresh ginger's heat, studied mainly for easing nausea.")),
+            Map.entry("Olive oil", new Compound("Polyphenols (extra virgin)",
+                    "Extra virgin olive oil has about 60mg of polyphenols per 100g, mostly hydroxytyrosol and tyrosol (Phenol-Explorer). Refined olive oil has far fewer."))
+    );
 
     // Parses the coverages map back out of a persisted microBreakdown (%RDA per 100g).
     // Lives here because buildMicroBreakdown() below owns the JSON shape.
@@ -707,10 +777,12 @@ public class ScoringService {
 
         ObjectNode json = MAPPER.createObjectNode();
         json.put("scoreCurve", "saturating");  // canary for DataSeeder Fix 12
-        // Fat profile for the fat-standout badges (grams per 100g); alaG is the Fix 15 canary.
+        // Fat profile for the claim badges (grams per 100g). Canaries: saturatedFatG (Fix 15),
+        // polyunsaturatedFatG (Fix 16).
         json.put("fatG", round1(data.fat100g()));
         json.put("monounsaturatedFatG", round1(data.monounsaturatedFat100g()));
         json.put("saturatedFatG", round1(data.saturatedFat100g()));
+        json.put("polyunsaturatedFatG", round1(data.polyunsaturatedFat100g()));
         json.put("alaG", round1(data.ala()));
         ArrayNode top = json.putArray("topNutrients");
         for (int rank = 0; rank < 3 && rank < indices.length; rank++) {

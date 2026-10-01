@@ -184,6 +184,11 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
                 "OR micro_breakdown NOT LIKE '%\"saturatedFatG\":%'");
+        // Fix 16: polyunsaturated fat added to micro_breakdown for the 'high monounsaturated fat'
+        // claim (share of all fatty acids). polyunsaturatedFatG is the canary.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
+                "OR micro_breakdown NOT LIKE '%\"polyunsaturatedFatG\":%'");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
