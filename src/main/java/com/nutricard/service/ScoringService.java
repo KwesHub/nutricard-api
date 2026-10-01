@@ -245,6 +245,12 @@ public class ScoringService {
             Map.entry("Brazil nuts", "Selenium is so concentrated that more than about 4 nuts a day can go over the safe upper limit. Two nuts already cover a full day, so treat them like a supplement, not a snack.")
     );
 
+    // Neutral context chips: true and worth knowing, but neither a strength nor a warning.
+    private static final Map<String, String> INFO_BADGES = Map.of(
+            "Beef mince 10%", "Up to 70g a day");
+    private static final Map<String, String> INFO_NOTES = Map.of(
+            "Beef mince 10%", "NHS advice: if you eat more than 90g of red or processed meat a day, cut down to 70g. The link to bowel cancer is strongest for processed meat (bacon, ham, sausages) and weaker but consistent for fresh red meat like this. 70g is a practical limit, not a danger line: the UK's advisers chose it because people can cut down to it without falling short on iron and zinc.");
+
     // A nutrient earns a strength badge when 100g covers at least half its RDA, or 30% for a
     // shortfall nutrient (black beans' folate at 37% is a real standout worth showing).
     private static final double BADGE_MIN_PCT_RDA = 50.0;
@@ -614,6 +620,10 @@ public class ScoringService {
         if (watch != null) {
             badges.add(new Badge(watch, "watch", ANTI_NUTRIENT_NOTES.get(foodName)));
         }
+        String info = INFO_BADGES.get(foodName);
+        if (info != null) {
+            badges.add(new Badge(info, "info", INFO_NOTES.get(foodName)));
+        }
         String cap = CAP_BADGES.get(foodName);
         if (cap != null) {
             badges.add(new Badge(cap, "cap", CAP_NOTES.get(foodName)));
@@ -662,7 +672,7 @@ public class ScoringService {
                 out.add(new Badge("Omega-9 fats", "strength", MUFA_BADGE_DETAIL));
             }
             if (ala >= ALA_BADGE_MIN_G) {
-                out.add(new Badge("Plant omega-3, converts poorly", "strength", ALA_BADGE_DETAIL));
+                out.add(new Badge("Plant omega-3 (low conversion)", "info", ALA_BADGE_DETAIL));
             }
             return out;
         } catch (Exception e) {

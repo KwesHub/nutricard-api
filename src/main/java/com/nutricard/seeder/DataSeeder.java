@@ -117,22 +117,11 @@ public class DataSeeder implements CommandLineRunner {
         // Drop white rice score if timing_scores is null (it was computed while role was PANTRY)
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'White rice') AND timing_scores IS NULL");
-        // Fix 2: Drop green lentils score computed from dry-weight USDA data (protein_quality > 55
-        // identifies the inflated score; corrected cooked values give protein_quality ≈ 39)
-        jdbcTemplate.update(
-                "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Green lentils') AND protein_quality > 55");
-        // Fix 3: Micronutrient scoring changed to per-100-kcal basis (divisor 5.0 → 1.2).
-        // Drop all scores so they recompute lazily. Canary: peanut butter scores >75 under old
-        // per-100g formula and ~58.8 under new per-kcal formula — becomes a no-op after one rescore.
-        jdbcTemplate.update(
-                "DELETE FROM nutrition_scores WHERE EXISTS (" +
-                "  SELECT 1 FROM nutrition_scores ns2" +
-                "  JOIN foods f ON f.id = ns2.food_id" +
-                "  WHERE f.name = 'Peanut butter' AND ns2.micronutrient_density > 75)");
-        // Fix 4: Omega-3 gut bonus added. Drop sardines score with gut_health = 0 so it recomputes
-        // and picks up the EPA+DHA bonus. Canary: gut_health = 0 is the pre-bonus value.
-        jdbcTemplate.update(
-                "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Sardines') AND gut_health = 0");
+        // Fixes 2, 3, 4, 7 and 8 were removed (2026-10-01). They found stale rows by a score VALUE
+        // (e.g. "peanut butter micro outside 55-62"), and later scoring changes moved those values,
+        // so Fix 7 started deleting every score on every startup. Every row they targeted also
+        // lacks the keys checked by Fixes 12, 13 and 15, which still remove it. Rule: a canary
+        // must be a structural marker (a JSON key), never a score value.
         // Fix 5: Drop scores for all newly added foods that may have been computed without the
         // omega-3 bonus. Also drops sardines if Fix 4 above was already a no-op (idempotent).
         // Canary: gut_breakdown column without omega3Bonus field identifies pre-bonus scores.
@@ -144,25 +133,6 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
                 "OR micro_breakdown NOT LIKE '%topNutrients%'");
-        // Fix 7: Rarity weighting changed from redistribution (abundant nutrients discounted
-        // below baseline) to pure bonus (abundant nutrients keep full weight), with the divisor
-        // recalibrated 1.2 -> 1.31 to hold the peanut butter ~58.8 anchor. Canary: peanut
-        // butter scored ~50 under the discount scheme and ~64 under the uncalibrated bonus
-        // scheme; ~58.8 after this fix, so the 55-62 window makes it a no-op after one rescore.
-        jdbcTemplate.update(
-                "DELETE FROM nutrition_scores WHERE EXISTS (" +
-                "  SELECT 1 FROM nutrition_scores ns2" +
-                "  JOIN foods f ON f.id = ns2.food_id" +
-                "  WHERE f.name = 'Peanut butter'" +
-                "  AND (ns2.micronutrient_density < 55 OR ns2.micronutrient_density > 62))");
-        // Fix 8: Lemon's FDC ID pointed at pork backribs (168299) and Sweet corn's at cilantro
-        // leaves (169997) — badges surfaced both. IDs corrected to 167746 / 169998. Canary:
-        // the wrong entries scored ~224 kcal for lemon (real: ~29) and ~23 kcal for corn
-        // (real: ~86), so the kcal windows identify poisoned scores and then become no-ops.
-        jdbcTemplate.update(
-                "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Lemon') AND kcal_per100g > 100");
-        jdbcTemplate.update(
-                "DELETE FROM nutrition_scores WHERE food_id IN (SELECT id FROM foods WHERE name = 'Sweet corn') AND kcal_per100g < 50");
         // Fix 9: FoodService.getCard() used to null timingScores on a managed entity for
         // PANTRY/OCCASIONAL foods, and dirty checking flushed the null to the DB — wiping
         // timing data that meal timing scoring needs. Drop wiped rows so they recompute.

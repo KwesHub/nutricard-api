@@ -101,6 +101,8 @@ class FoodMapsConsistencyTest {
     void everyCapBadgeHasANote() throws Exception {
         assertEquals(map(ScoringService.class, "CAP_BADGES").keySet(),
                 map(ScoringService.class, "CAP_NOTES").keySet());
+        assertEquals(map(ScoringService.class, "INFO_BADGES").keySet(),
+                map(ScoringService.class, "INFO_NOTES").keySet());
     }
 
     @Test
