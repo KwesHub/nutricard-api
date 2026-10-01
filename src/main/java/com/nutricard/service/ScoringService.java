@@ -177,30 +177,6 @@ public class ScoringService {
             Map.entry("Brazil nuts", 68.0)
     );
 
-    private static final Map<String, Double> SYNERGY_MAP = Map.ofEntries(
-            Map.entry("Garlic", 95.0), Map.entry("Olive oil", 90.0),
-            Map.entry("Spinach", 85.0), Map.entry("Oats", 80.0),
-            Map.entry("Ginger", 78.0), Map.entry("Eggs", 75.0),
-            Map.entry("Kiwi", 75.0), Map.entry("White rice", 72.0),
-            Map.entry("Brown rice", 68.0), Map.entry("Sardines", 70.0),
-            Map.entry("Blueberries", 65.0), Map.entry("Lemon", 92.0),
-            Map.entry("Chicken breast", 55.0), Map.entry("Red lentils", 62.0),
-            Map.entry("Green lentils", 62.0), Map.entry("Red kidney beans", 60.0),
-            Map.entry("Sweet potato", 58.0), Map.entry("Dark chocolate 70%", 58.0),
-            Map.entry("Honey", 60.0), Map.entry("Banana", 55.0),
-            Map.entry("Peanut butter", 55.0), Map.entry("Tahini", 52.0),
-            Map.entry("Peas", 58.0), Map.entry("Pearl barley", 50.0),
-            Map.entry("Whole-wheat spaghetti", 48.0), Map.entry("Beef mince 10%", 45.0),
-            Map.entry("Salmon", 75.0), Map.entry("Greek yogurt", 65.0),
-            Map.entry("Broccoli", 90.0), Map.entry("Avocado", 82.0),
-            Map.entry("Quinoa", 72.0), Map.entry("Black beans", 70.0),
-            Map.entry("Walnuts", 70.0), Map.entry("Cottage cheese", 58.0),
-            Map.entry("Flaxseed", 62.0), Map.entry("Chia seeds", 65.0),
-            Map.entry("Sweet corn", 55.0), Map.entry("Bell pepper", 85.0),
-            Map.entry("Tomato", 88.0), Map.entry("Brazil nuts", 50.0),
-            Map.entry("Apple", 40.0)
-    );
-
     // Curated educational one-liners — shown on the food card when present. Not persisted;
     // attached to the response at serve time via getStandoutFact().
     private static final Map<String, String> STANDOUT_FACTS = Map.ofEntries(
@@ -470,8 +446,6 @@ public class ScoringService {
         // 5. Phytonutrients
         double phytonutrients = PHYTO_MAP.getOrDefault(name, 20.0);
 
-        // Synergy potential
-        double synergyPotential = SYNERGY_MAP.getOrDefault(name, 40.0);
 
         // Timing scores
         Map<String, Double> timingScores = calculateTimingScores(food, data,
@@ -491,7 +465,6 @@ public class ScoringService {
         score.setPhytonutrients(round(phytonutrients));
         score.setBioavailabilityModifier(bioavailability);
         applyOverallScore(score);
-        score.setSynergyPotential(synergyPotential);
         score.setEnergyProfileNeutral(round(energyProfile));
 
         // Breakdowns are JSON strings in TEXT columns. Easy to change, but types.ts has to be kept
@@ -673,7 +646,7 @@ public class ScoringService {
     private static final String MUFA_BADGE_DETAIL =
             "Mostly oleic acid (omega-9), the main fat in olive oil. Not essential, since your body makes it, but eating it in place of saturated fat improves blood cholesterol.";
     private static final String ALA_BADGE_DETAIL =
-            "The plant omega-3, which is essential. Your body turns only about 5 to 10% of it into EPA and DHA, so it doesn't replace oily fish.";
+            "ALA is essential in its own right, but your body converts only around 5 to 10% of it into EPA and very little into DHA, the omega-3s oily fish provide. Good to have; not a substitute for fish.";
 
     private List<Badge> fatBadges(NutritionScore score) {
         if (score.getMicroBreakdown() == null) return List.of();
@@ -689,7 +662,7 @@ public class ScoringService {
                 out.add(new Badge("Omega-9 fats", "strength", MUFA_BADGE_DETAIL));
             }
             if (ala >= ALA_BADGE_MIN_G) {
-                out.add(new Badge("Plant omega-3 (ALA)", "strength", ALA_BADGE_DETAIL));
+                out.add(new Badge("Plant omega-3, converts poorly", "strength", ALA_BADGE_DETAIL));
             }
             return out;
         } catch (Exception e) {

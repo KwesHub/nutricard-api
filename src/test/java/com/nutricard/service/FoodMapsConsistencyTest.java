@@ -55,7 +55,7 @@ class FoodMapsConsistencyTest {
 
     private static final String[] SCORING_MAPS = {
             "PDCAAS_MAP", "COMPLETENESS_MAP", "BIOAVAILABILITY_MAP", "GI_MAP", "PREBIOTIC_MAP",
-            "ANTI_NUTRIENT_MAP", "PHYTO_MAP", "SYNERGY_MAP", "STANDOUT_FACTS", "ANTI_NUTRIENT_NOTES",
+            "ANTI_NUTRIENT_MAP", "PHYTO_MAP", "STANDOUT_FACTS", "ANTI_NUTRIENT_NOTES",
             "ANTI_NUTRIENT_BADGES", "CAP_BADGES", "CAP_NOTES"
     };
 
@@ -106,11 +106,28 @@ class FoodMapsConsistencyTest {
     @Test
     void everySeededFoodHasTheMapsThatHaveNoSensibleDefault() throws Exception {
         List<String> problems = new ArrayList<>();
-        for (String name : new String[]{"GI_MAP", "PHYTO_MAP", "SYNERGY_MAP", "BIOAVAILABILITY_MAP"}) {
+        for (String name : new String[]{"GI_MAP", "PHYTO_MAP", "BIOAVAILABILITY_MAP"}) {
             Set<String> missing = new HashSet<>(seeded);
             missing.removeAll(map(ScoringService.class, name).keySet());
             if (!missing.isEmpty()) problems.add(name + " is missing " + missing);
         }
         assertTrue(problems.isEmpty(), problems.toString());
+    }
+
+    @Test
+    void everySeededFoodHasVersatilityTraitsAndEveryPairingNamesARealFood() {
+        Set<String> noTraits = new HashSet<>(seeded);
+        noTraits.removeAll(FoodVersatility.TRAITS.keySet());
+        assertTrue(noTraits.isEmpty(), "seeded foods with no versatility traits: " + noTraits);
+        Set<String> extraTraits = new HashSet<>(FoodVersatility.TRAITS.keySet());
+        extraTraits.removeAll(seeded);
+        assertTrue(extraTraits.isEmpty(), "versatility traits for unknown foods: " + extraTraits);
+
+        List<String> unknown = new ArrayList<>();
+        for (FoodPairings.Pairing p : FoodPairings.PAIRINGS) {
+            p.left().stream().filter(n -> !seeded.contains(n)).forEach(unknown::add);
+            p.right().stream().filter(n -> !seeded.contains(n)).forEach(unknown::add);
+        }
+        assertTrue(unknown.isEmpty(), "pairings naming unknown foods: " + unknown);
     }
 }

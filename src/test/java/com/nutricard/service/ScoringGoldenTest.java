@@ -65,7 +65,7 @@ class ScoringGoldenTest {
                 "energy=" + s.getEnergyProfile(), "gut=" + s.getGutHealth(),
                 "phyto=" + s.getPhytonutrients(), "overall=" + s.getOverallScore(),
                 "bio=" + s.getBioavailabilityModifier(), "kcal=" + s.getKcalPer100g(),
-                "synergy=" + s.getSynergyPotential(), "neutral=" + s.getEnergyProfileNeutral(),
+                "neutral=" + s.getEnergyProfileNeutral(),
                 "timing=" + s.getTimingScores(), "proteinB=" + s.getProteinBreakdown(),
                 "energyB=" + s.getEnergyBreakdown(), "gutB=" + s.getGutBreakdown(),
                 "microB=" + s.getMicroBreakdown(),

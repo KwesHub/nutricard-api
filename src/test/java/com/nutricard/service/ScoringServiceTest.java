@@ -62,7 +62,6 @@ class ScoringServiceTest {
         assertEquals(74.5, s.getProteinQuality(), 0.01);
         assertEquals(0.80, s.getBioavailabilityModifier(), 0.001);
         assertEquals(20.0, s.getPhytonutrients(), 0.001);
-        assertEquals(40.0, s.getSynergyPotential(), 0.001);
     }
 
     @Test

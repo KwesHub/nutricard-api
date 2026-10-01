@@ -179,36 +179,8 @@ public class MealScoringService {
                 .map(mf -> mf.getFood().getName())
                 .toList();
 
-        boolean hasOmega3Fish = foodNames.stream().anyMatch(n ->
-                n.equals("Sardines") || n.equals("Mackerel") || n.equals("Salmon"));
-        boolean hasAllium = foodNames.stream().anyMatch(n -> n.equals("Garlic") || n.equals("Onion"));
-        boolean hasOats = foodNames.contains("Oats");
-        boolean hasVitC = foodNames.stream().anyMatch(n ->
-                n.equals("Kiwi") || n.equals("Lemon") || n.equals("Orange") ||
-                n.equals("Bell pepper") || n.equals("Broccoli") || n.equals("Tomato"));
-        boolean hasSpinach = foodNames.contains("Spinach");
-        boolean hasVitCForIron = foodNames.stream().anyMatch(n ->
-                n.equals("Lemon") || n.equals("Kiwi") || n.equals("Bell pepper") || n.equals("Broccoli"));
-        boolean hasTomato = foodNames.contains("Tomato");
-        boolean hasDietaryFat = foodNames.stream().anyMatch(n ->
-                n.equals("Olive oil") || n.equals("Avocado") || n.equals("Salmon") ||
-                n.equals("Sardines") || n.equals("Walnuts") || n.equals("Flaxseed") || n.equals("Chia seeds"));
-
-        if (hasOmega3Fish && hasAllium) {
-            synergies.add("Omega-3 + garlic: both are studied for lowering inflammation");
-        }
-
-        if (hasOats && hasVitC) {
-            synergies.add("Vitamin C offsets some of the iron-blocking effect of the phytic acid in oats");
-        }
-
-        if (hasSpinach && hasVitCForIron) {
-            synergies.add("Vitamin C improves iron absorption from spinach");
-        }
-
-        if (hasTomato && hasDietaryFat) {
-            synergies.add("Fat + Lycopene: dietary fat increases lycopene absorption from tomato by up to 4x");
-        }
+        // Pairing reasons are written lower-case to follow a food list on the food card
+        FoodPairings.activeIn(foodNames).forEach(r -> synergies.add(Character.toUpperCase(r.charAt(0)) + r.substring(1)));
 
         boolean hasHighProtein = foodsWithScores.stream()
                 .anyMatch(fs -> fs.score().getProteinQuality() > 60);

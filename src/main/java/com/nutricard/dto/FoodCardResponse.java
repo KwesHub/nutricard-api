@@ -2,6 +2,8 @@ package com.nutricard.dto;
 
 import com.nutricard.model.Food;
 import com.nutricard.model.NutritionScore;
+import com.nutricard.service.FoodPairings;
+import com.nutricard.service.FoodVersatility;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -14,5 +16,7 @@ public class FoodCardResponse {
     private NutritionScore nutritionScore;
     private CardInsights insights;
 
-    public record CardInsights(String standoutFact, String penaltyNote, List<Badge> badges) {}
+    public record CardInsights(String standoutFact, String penaltyNote, List<Badge> badges,
+                               FoodVersatility.Versatility versatility,
+                               List<FoodPairings.PairsWith> pairsWith) {}
 }

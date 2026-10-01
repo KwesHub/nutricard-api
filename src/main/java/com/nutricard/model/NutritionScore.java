@@ -36,7 +36,6 @@ public class NutritionScore {
 
     private Double overallScore;
 
-    private Double synergyPotential;
 
     private Double energyProfileNeutral;
 

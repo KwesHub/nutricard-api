@@ -191,7 +191,7 @@ class MealScoringServiceTest {
 
     @Test
     void fishWithGarlicIsAnOmega3AllicinSynergy() {
-        assertTrue(synergies(food(1, "Sardines"), food(2, "Garlic")).contains("Omega-3 + garlic"));
+        assertTrue(synergies(food(1, "Sardines"), food(2, "Garlic")).contains("Omega-3 and garlic"));
     }
 
     @Test
@@ -200,14 +200,16 @@ class MealScoringServiceTest {
     }
 
     @Test
-    void spinachWithLemonImprovesIronAbsorption() {
-        assertTrue(synergies(food(1, "Spinach"), food(2, "Lemon")).contains("iron absorption"));
+    void spinachWithAVitaminCFoodImprovesIronAbsorption() {
+        assertTrue(synergies(food(1, "Spinach"), food(2, "Bell pepper")).contains("iron absorption"));
+        // a squeeze of lemon has too little vitamin C to count
+        assertFalse(synergies(food(3, "Spinach"), food(4, "Lemon")).contains("iron absorption"));
     }
 
     @Test
     void tomatoNeedsDietaryFatForTheLycopeneSynergy() {
-        assertTrue(synergies(food(1, "Tomato"), food(2, "Olive oil")).contains("Lycopene"));
-        assertFalse(synergies(food(3, "Tomato"), food(4, "Eggs")).contains("Lycopene"));
+        assertTrue(synergies(food(1, "Tomato"), food(2, "Olive oil")).contains("lycopene"));
+        assertFalse(synergies(food(3, "Tomato"), food(4, "Eggs")).contains("lycopene"));
     }
 
     @Test

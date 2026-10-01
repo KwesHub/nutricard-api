@@ -78,7 +78,9 @@ public class FoodService {
         return new FoodCardResponse(food, score, new FoodCardResponse.CardInsights(
                 scoringService.getStandoutFact(food.getName()),
                 scoringService.getPenaltyNote(food.getName()),
-                scoringService.deriveBadges(score, food.getName())));
+                scoringService.deriveBadges(score, food.getName()),
+                FoodVersatility.of(food.getName()),
+                FoodPairings.forFood(food.getName())));
     }
 
     @Transactional
