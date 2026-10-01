@@ -10,11 +10,17 @@ import java.util.List;
 // food's score hasn't been computed yet).
 public record FoodListItem(Long id, String name, String category, String description,
                            Integer servingSizeG, String foodRole, List<Badge> badges,
-                           Double overallScore) {
+                           Double overallScore, Stats stats) {
+
+    // The five 0-100 stats shown on the grid card; null with the score while warming up.
+    public record Stats(Double protein, Double micro, Double energy, Double gut, Double phyto) {}
+
 
     public static FoodListItem of(Food food, List<Badge> badges, NutritionScore score) {
         return new FoodListItem(food.getId(), food.getName(), food.getCategory(),
                 food.getDescription(), food.getServingSizeG(), food.getFoodRole().name(), badges,
-                score == null ? null : score.getOverallScore());
+                score == null ? null : score.getOverallScore(),
+                score == null ? null : new Stats(score.getProteinQuality(), score.getMicronutrientDensity(),
+                        score.getEnergyProfile(), score.getGutHealth(), score.getPhytonutrients()));
     }
 }
