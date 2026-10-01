@@ -75,7 +75,6 @@ class FoodMapsConsistencyTest {
     @Test
     void everyUsdaIdBelongsToASeededFood() throws Exception {
         Set<String> extra = new HashSet<>(map(NutrientDataService.class, "FDC_ID_MAP").keySet());
-        extra.addAll(map(NutrientDataService.class, "COOKED_CORRECTIONS").keySet());
         extra.removeAll(seeded);
         assertTrue(extra.isEmpty(), "USDA map keys that match no seeded food (typo?): " + extra);
     }

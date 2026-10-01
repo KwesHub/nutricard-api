@@ -24,31 +24,24 @@ public class NutrientDataService {
     private static final int NUTRIENT_ID_EPA = 1278;
     private static final int NUTRIENT_ID_DHA = 1272;
 
-    // FDC 172420 ("Lentils, green, whole, raw") is a dry/raw weight entry — protein (~24g),
-    // calories (~352 kcal) and fiber (~31g) per 100g are all inflated vs cooked values.
-    // Corrections below are applied after the USDA fetch so the full scoring pipeline
-    // (protein quality, energy, gut health, calorie display) sees the correct cooked values.
-    private record CookedCorrection(double proteinG, double energyKcal, double fiberG) {}
-
-    private static final Map<String, CookedCorrection> COOKED_CORRECTIONS = Map.of(
-            "Green lentils", new CookedCorrection(9.02, 116.0, 7.9)
-    );
-
+    // Every id points at the food as eaten: grains, pasta and pulses cooked, mince cooked.
+    // A dry or raw entry inflates every per-100g value about 3x. Check the USDA description
+    // (GET /fdc/v1/food/{id}) when adding a food; a wrong id silently scores the wrong food.
     private static final Map<String, Integer> FDC_ID_MAP = Map.ofEntries(
             Map.entry("Sardines", 175139),
             Map.entry("Oats", 173904),
             Map.entry("Garlic", 169230),
             Map.entry("Eggs", 171287),
             Map.entry("Chicken breast", 171477),
-            Map.entry("Beef mince 10%", 174036),
+            Map.entry("Beef mince 10%", 171794),
             Map.entry("Sweet potato", 168482),
-            Map.entry("Brown rice", 169703),
-            Map.entry("White rice", 169756),
-            Map.entry("Pearl barley", 170283),
-            Map.entry("Whole-wheat spaghetti", 169735),
+            Map.entry("Brown rice", 169704),
+            Map.entry("White rice", 169757),
+            Map.entry("Pearl barley", 170285),
+            Map.entry("Whole-wheat spaghetti", 168910),
             Map.entry("Red lentils", 172421),
-            Map.entry("Green lentils", 172420),
-            Map.entry("Red kidney beans", 175200),
+            Map.entry("Green lentils", 172421),
+            Map.entry("Red kidney beans", 175194),
             Map.entry("Peas", 170420),
             Map.entry("Spinach", 168462),
             Map.entry("Apple", 171688),
@@ -98,14 +91,7 @@ public class NutrientDataService {
         if (data == null) {
             data = fetchBySearch(foodName);
         }
-        if (data != null && COOKED_CORRECTIONS.containsKey(foodName)) {
-            data = applyCookedCorrection(data, COOKED_CORRECTIONS.get(foodName));
-        }
         return data;
-    }
-
-    private NutrientData applyCookedCorrection(NutrientData d, CookedCorrection c) {
-        return d.withProteinEnergyFibre(c.proteinG(), c.energyKcal(), c.fiberG());
     }
 
     private NutrientData fetchByFdcId(int fdcId, String foodName) {
@@ -298,16 +284,5 @@ public class NutrientDataService {
             double iodine,
             double epa,
             double dha
-    ) {
-        // Copy with three fields replaced. This is the only place the whole record is copied by
-        // position, and NutrientDataServiceTest checks that every other field comes through.
-        NutrientData withProteinEnergyFibre(double protein, double energyKcal, double fibre) {
-            return new NutrientData(protein, fibre, energyKcal, fat100g, saturatedFat100g,
-                    sugars100g, monounsaturatedFat100g, polyunsaturatedFat100g,
-                    vitaminA, vitaminC, vitaminD, vitaminE, vitaminK,
-                    vitaminB1, vitaminB2, vitaminB3, vitaminB6, vitaminB12, folate,
-                    calcium, iron, magnesium, phosphorus, potassium, zinc, selenium, copper,
-                    choline, pantothenicAcid, biotin, manganese, iodine, epa, dha);
-        }
-    }
+    ) {}
 }

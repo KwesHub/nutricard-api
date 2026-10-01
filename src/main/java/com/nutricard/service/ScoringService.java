@@ -137,6 +137,10 @@ public class ScoringService {
             Map.entry("Bell pepper", 5), Map.entry("Tomato", 5)
     );
 
+    // Live cultures. Greek yogurt is sold live as standard; cottage cheese and quark are often
+    // acid-set or heat-treated after culturing, so they get no credit by default.
+    private static final Map<String, Integer> PROBIOTIC_MAP = Map.of("Greek yogurt", 15);
+
     private static final Map<String, Integer> ANTI_NUTRIENT_MAP = Map.ofEntries(
             Map.entry("Red kidney beans", 15), Map.entry("Red lentils", 8), Map.entry("Green lentils", 8),
             Map.entry("Oats", 5), Map.entry("Spinach", 5),
@@ -145,27 +149,31 @@ public class ScoringService {
             Map.entry("Broccoli", 5), Map.entry("Brazil nuts", 8)
     );
 
+    // Plant compounds (polyphenols, carotenoids, glucosinolates, organosulfur). The plant values
+    // are still hand-curated; replacing them with sourced data (Phenol-Explorer, USDA carotenoids)
+    // is open work, see SCORING_AUDIT.md. Animal foods have essentially none: 0, except small
+    // credit for salmon's astaxanthin (about 0.4-1.0 mg/100g, from feed) and egg yolk lutein.
     private static final Map<String, Double> PHYTO_MAP = Map.ofEntries(
             Map.entry("Garlic", 92.0), Map.entry("Blueberries", 95.0),
             Map.entry("Ginger", 90.0), Map.entry("Dark chocolate 70%", 72.0),
             Map.entry("Olive oil", 85.0), Map.entry("Spinach", 82.0),
-            Map.entry("Sardines", 80.0), Map.entry("Kiwi", 75.0),
+            Map.entry("Sardines", 0.0), Map.entry("Kiwi", 75.0),
             Map.entry("Apple", 72.0), Map.entry("Oats", 68.0),
             Map.entry("Peas", 65.0), Map.entry("Sweet potato", 65.0),
             Map.entry("Green lentils", 62.0), Map.entry("Red lentils", 60.0),
             Map.entry("Red kidney beans", 60.0), Map.entry("Banana", 55.0),
             Map.entry("Peanut butter", 55.0), Map.entry("Tahini", 52.0),
-            Map.entry("Honey", 50.0), Map.entry("Eggs", 45.0),
+            Map.entry("Honey", 50.0), Map.entry("Eggs", 10.0),
             Map.entry("Pearl barley", 42.0), Map.entry("Whole-wheat spaghetti", 38.0),
-            Map.entry("Brown rice", 35.0), Map.entry("Chicken breast", 30.0),
-            Map.entry("Beef mince 10%", 25.0), Map.entry("White rice", 20.0),
+            Map.entry("Brown rice", 35.0), Map.entry("Chicken breast", 0.0),
+            Map.entry("Beef mince 10%", 0.0), Map.entry("White rice", 20.0),
             Map.entry("Broccoli", 95.0), Map.entry("Tomato", 88.0),
             Map.entry("Bell pepper", 82.0), Map.entry("Avocado", 80.0),
             Map.entry("Walnuts", 78.0), Map.entry("Lemon", 75.0),
             Map.entry("Flaxseed", 72.0), Map.entry("Black beans", 72.0),
-            Map.entry("Salmon", 70.0), Map.entry("Chia seeds", 65.0),
+            Map.entry("Salmon", 10.0), Map.entry("Chia seeds", 65.0),
             Map.entry("Quinoa", 55.0), Map.entry("Sweet corn", 45.0),
-            Map.entry("Greek yogurt", 25.0), Map.entry("Cottage cheese", 20.0),
+            Map.entry("Greek yogurt", 0.0), Map.entry("Cottage cheese", 0.0),
             Map.entry("Brazil nuts", 68.0)
     );
 
@@ -262,13 +270,19 @@ public class ScoringService {
             Map.entry("Walnuts", "Genuinely good fats, but a high omega-6 load in larger amounts — a 15–20g topping is the sweet spot, not a daily handful.")
     );
 
-    // A nutrient earns a strength badge when 100g covers at least half its RDA.
+    // A nutrient earns a strength badge when 100g covers at least half its RDA, or 30% for a
+    // shortfall nutrient (black beans' folate at 37% is a real standout worth showing).
     private static final double BADGE_MIN_PCT_RDA = 50.0;
+    private static final double BADGE_MIN_PCT_RDA_RARE = 30.0;
     private static final int BADGE_STRENGTH_LIMIT = 3;
 
-    // Overall score: top four stats weighted 50%, 30%, 15%, 5% (lowest stat ignored)
-    // Best stat counts most and the worst is dropped, so a food isn't marked down for something it isn't for.
-    private static final double[] OVERALL_STAT_WEIGHTS = {0.50, 0.30, 0.15, 0.05};
+    // Overall score: the best two of the four quality stats (protein, micronutrients, gut,
+    // phytonutrients), weighted 60% and 40%. Most foods are genuinely strong at two things
+    // (salmon: protein and micronutrients; oats: gut and phytonutrients), so a third stat would
+    // mark them down for something they aren't for. Energy profile is left out: it says when a
+    // food suits you (it drives the timing grades), not how good the food is. Best two agreed
+    // with the owner's own food rankings better than best three (+0.52 vs +0.40, SCORING_AUDIT.md).
+    private static final double[] OVERALL_STAT_WEIGHTS = {0.60, 0.40};
 
     // --- Two-axis "fuel" model (gastric-emptying, not glycaemic index) ---
     // The energy/timing score places a food in a 2D space and measures how close it sits to
@@ -296,26 +310,28 @@ public class ScoringService {
     // Rarity is a bonus, not a redistribution: shortfall nutrients (under-consumed in typical diets
     // or concentrated in few foods) count extra, while abundant nutrients keep full baseline weight,
     // so a food rich in easy-to-get nutrients is never marked down for it.
-    // Tiers: 1.5 rare/shortfall, 1.25 under-consumed, 1.0 everything else.
+    // Tiers: 2.0 for the US Dietary Guidelines' "nutrients of public health concern" (calcium,
+    // potassium, vitamin D, fibre), 1.5 for nutrients commonly under-eaten in UK/US surveys,
+    // 1.0 for everything else. Fibre is included as in NRF9.3, the best-known density index.
     private enum Nutrient {
-        VITAMIN_A("vitaminA", 900, 1.0, NutrientData::vitaminA),
-        VITAMIN_C("vitaminC", 90, 1.0, NutrientData::vitaminC),
-        VITAMIN_D("vitaminD", 20, 1.5, NutrientData::vitaminD),
-        VITAMIN_E("vitaminE", 15, 1.25, NutrientData::vitaminE),
-        VITAMIN_K("vitaminK", 120, 1.25, NutrientData::vitaminK),
+        VITAMIN_A("vitaminA", 900, 1.5, NutrientData::vitaminA),
+        VITAMIN_C("vitaminC", 90, 1.5, NutrientData::vitaminC),
+        VITAMIN_D("vitaminD", 20, 2.0, NutrientData::vitaminD),
+        VITAMIN_E("vitaminE", 15, 1.5, NutrientData::vitaminE),
+        VITAMIN_K("vitaminK", 120, 1.0, NutrientData::vitaminK),
         VITAMIN_B1("vitaminB1", 1.2, 1.0, NutrientData::vitaminB1),
         VITAMIN_B2("vitaminB2", 1.3, 1.0, NutrientData::vitaminB2),
         VITAMIN_B3("vitaminB3", 16, 1.0, NutrientData::vitaminB3),
         VITAMIN_B6("vitaminB6", 1.7, 1.0, NutrientData::vitaminB6),
         VITAMIN_B12("vitaminB12", 2.4, 1.0, NutrientData::vitaminB12),
-        FOLATE("folate", 400, 1.25, NutrientData::folate),
-        CALCIUM("calcium", 1000, 1.25, NutrientData::calcium),
-        IRON("iron", 18, 1.25, NutrientData::iron),
-        MAGNESIUM("magnesium", 420, 1.25, NutrientData::magnesium),
+        FOLATE("folate", 400, 1.5, NutrientData::folate),
+        CALCIUM("calcium", 1000, 2.0, NutrientData::calcium),
+        IRON("iron", 18, 1.5, NutrientData::iron),
+        MAGNESIUM("magnesium", 420, 1.5, NutrientData::magnesium),
         PHOSPHORUS("phosphorus", 700, 1.0, NutrientData::phosphorus),
-        POTASSIUM("potassium", 3500, 1.5, NutrientData::potassium),
-        ZINC("zinc", 11, 1.25, NutrientData::zinc),
-        SELENIUM("selenium", 55, 1.25, NutrientData::selenium),
+        POTASSIUM("potassium", 3500, 2.0, NutrientData::potassium),
+        ZINC("zinc", 11, 1.5, NutrientData::zinc),
+        SELENIUM("selenium", 55, 1.5, NutrientData::selenium),
         COPPER("copper", 0.9, 1.0, NutrientData::copper),
         CHOLINE("choline", 550, 1.5, NutrientData::choline),
         PANTOTHENIC_ACID("pantothenicAcid", 5, 1.0, NutrientData::pantothenicAcid),
@@ -323,7 +339,8 @@ public class ScoringService {
         MANGANESE("manganese", 2.3, 1.0, NutrientData::manganese),
         IODINE("iodine", 150, 1.5, NutrientData::iodine),
         EPA("epa", 0.5, 1.5, NutrientData::epa),
-        DHA("dha", 0.5, 1.5, NutrientData::dha);
+        DHA("dha", 0.5, 1.5, NutrientData::dha),
+        FIBRE("fibre", 30, 2.0, NutrientData::fiber100g);
 
         final String key;
         final double rda;
@@ -342,10 +359,16 @@ public class ScoringService {
 
     private static final double TOTAL_RARITY_WEIGHT = Arrays.stream(NUTRIENTS).mapToDouble(n -> n.rarity).sum();
 
-    // Curve steepness, a tuning number: a food averaging 10% adequacy across all 26 nutrients per
-    // 100 kcal scores ~63. The old hard cap put 23 of 41 foods at exactly 100; this gives spinach
-    // ~93, a median near 35, and no food at 100.
+    // Curve steepness, a tuning number: a food averaging 10% adequacy across all 27 nutrients per
+    // 100 kcal scores ~63. The old hard cap put 23 of 41 foods at exactly 100; with the curve no
+    // food reaches 100.
     private static final double MICRO_CURVE_K = 0.10;
+
+    // Foods under 50 kcal per 100g are scored as if they had 50. Without it, scaling to 100 kcal
+    // multiplied a tomato's modest vitamin C (15% per 100g) by 5.5 and put it above eggs. Tested
+    // against the owner's own food rankings: same agreement as the plain per-kcal score (+0.48),
+    // where blending in per-100g amounts made it worse (+0.35). See SCORING_AUDIT.md.
+    private static final double MICRO_KCAL_FLOOR = 50.0;
 
     private static final Set<String> RARE_NUTRIENTS = Arrays.stream(NUTRIENTS)
             .filter(n -> n.rarity >= 1.25)
@@ -405,19 +428,19 @@ public class ScoringService {
         double pdcaas = PDCAAS_MAP.getOrDefault(name, 0.70);
         double completeness = COMPLETENESS_MAP.getOrDefault(name, 0.70);
         double volumeScore = Math.min(data.proteins100g() / 22.0, 1.0) * 50;
-        double qualityScore = pdcaas * completeness * 50;
+        // Quality only counts in proportion to how much protein there is (full credit from 10g),
+        // otherwise olive oil, with no protein, collected about 25 points for "quality".
+        double qualityScore = pdcaas * completeness * 50 * Math.min(data.proteins100g() / 10.0, 1.0);
         double proteinQuality = volumeScore + qualityScore;
 
         // 2. Micronutrient density — RDA coverage per 100 kcal across all tracked nutrients.
         // Scoring per 100 kcal (not per 100g) so calorie-dense foods like peanut butter can't game
         // the formula by volume. The weighted average coverage is then passed through a saturating
         // curve (see MICRO_CURVE_K) so even spinach stays below 100 and foods keep their rank order.
-        double kcal = data.energyKcal100g();
-        if (kcal <= 0) {
-            log.warn("energyKcal missing for '{}' — using 100 kcal fallback for micronutrient density", name);
-            kcal = 100.0;
+        if (data.energyKcal100g() <= 0) {
+            log.warn("energyKcal missing for '{}' — scoring micronutrient density at the {} kcal floor", name, MICRO_KCAL_FLOOR);
         }
-        double perKcalScale = 100.0 / kcal;
+        double perKcalScale = 100.0 / Math.max(data.energyKcal100g(), MICRO_KCAL_FLOOR);
         // Coverage stays capped at 1.0 per nutrient inside the score (mega-doses shouldn't
         // multiply it); the uncapped per-100g percentages are surfaced in microBreakdown instead.
         double weightedCoverageSum = 0;
@@ -440,9 +463,10 @@ public class ScoringService {
         double fibreScoreGut = Math.min(data.fiber100g() / 10.0, 1.0) * 60;
         int prebioticBonus = PREBIOTIC_MAP.getOrDefault(name, 0);
         int antiNutrientPenalty = ANTI_NUTRIENT_MAP.getOrDefault(name, 0);
+        int probioticBonus = PROBIOTIC_MAP.getOrDefault(name, 0);
         // EPA+DHA support gut microbiome diversity; capped at 20 points
         double omega3Bonus = Math.min((data.epa() + data.dha()) * 7.0, 20.0);
-        double gutHealth = Math.min(Math.max(fibreScoreGut + prebioticBonus + omega3Bonus - antiNutrientPenalty, 0), 100);
+        double gutHealth = Math.min(Math.max(fibreScoreGut + prebioticBonus + probioticBonus + omega3Bonus - antiNutrientPenalty, 0), 100);
 
         // 5. Phytonutrients
         double phytonutrients = PHYTO_MAP.getOrDefault(name, 20.0);
@@ -481,8 +505,8 @@ public class ScoringService {
                 data.fiber100g(), gi, data.sugars100g(), unsaturatedRatio,
                 stomachSpeed(data), bloodSpeed(data, name)));
         score.setGutBreakdown(String.format(Locale.ROOT,
-                "{\"fibreG\":%.2f,\"prebioticBonus\":%d,\"antiNutrientPenalty\":%d,\"omega3Bonus\":%.1f}",
-                data.fiber100g(), prebioticBonus, antiNutrientPenalty, omega3Bonus));
+                "{\"fibreG\":%.2f,\"prebioticBonus\":%d,\"probioticBonus\":%d,\"antiNutrientPenalty\":%d,\"omega3Bonus\":%.1f}",
+                data.fiber100g(), prebioticBonus, probioticBonus, antiNutrientPenalty, omega3Bonus));
         score.setMicroBreakdown(buildMicroBreakdown(pctRdaPer100g));
 
         // Timing scores as JSON string
@@ -602,7 +626,7 @@ public class ScoringService {
         List<Badge> badges = new ArrayList<>();
         if (score != null) {
             parseCoverages(score).entrySet().stream()
-                    .filter(e -> e.getValue() >= BADGE_MIN_PCT_RDA)
+                    .filter(e -> e.getValue() >= (isRareNutrient(e.getKey()) ? BADGE_MIN_PCT_RDA_RARE : BADGE_MIN_PCT_RDA))
                     .sorted(Comparator
                             .comparing((Map.Entry<String, Double> e) -> !isRareNutrient(e.getKey()))
                             .thenComparing(Map.Entry::getValue, Comparator.reverseOrder()))
@@ -679,16 +703,15 @@ public class ScoringService {
         return json.toString();
     }
 
-    private double calculateOverallFromStats(double protein, double micro, double energy,
-                                             double gut, double phyto) {
-        double[] stats = {protein, micro, energy, gut, phyto};
-        Integer[] indices = {0, 1, 2, 3, 4};
+    private double calculateOverallFromStats(double protein, double micro, double gut, double phyto) {
+        double[] stats = {protein, micro, gut, phyto};
+        Integer[] indices = {0, 1, 2, 3};
         Arrays.sort(indices, (a, b) -> {
             int byScore = Double.compare(stats[b], stats[a]);
             return byScore != 0 ? byScore : Integer.compare(a, b);
         });
         double overall = 0;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < OVERALL_STAT_WEIGHTS.length; i++) {
             overall += stats[indices[i]] * OVERALL_STAT_WEIGHTS[i];
         }
         return overall;
@@ -698,7 +721,6 @@ public class ScoringService {
         score.setOverallScore(round(calculateOverallFromStats(
                 score.getProteinQuality(),
                 score.getMicronutrientDensity(),
-                score.getEnergyProfile(),
                 score.getGutHealth(),
                 score.getPhytonutrients())));
     }

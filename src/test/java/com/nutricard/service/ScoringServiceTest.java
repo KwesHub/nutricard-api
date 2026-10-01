@@ -41,14 +41,15 @@ class ScoringServiceTest {
     }
 
     @Test
-    void overallUsesTopFourStatsAndDropsTheLowest() {
+    void overallUsesBestTwoQualityStatsAndIgnoresEnergy() {
         NutritionScore s = score("Mystery food", data(20, 5, 150, 5, 2, 0, 0, 0));
 
         double[] stats = {s.getProteinQuality(), s.getMicronutrientDensity(),
-                s.getEnergyProfile(), s.getGutHealth(), s.getPhytonutrients()};
+                s.getGutHealth(), s.getPhytonutrients()};
         Arrays.sort(stats);
-        // stats is ascending, so index 4 is the best stat and index 0 is dropped
-        double expected = stats[4] * 0.50 + stats[3] * 0.30 + stats[2] * 0.15 + stats[1] * 0.05;
+        // stats is ascending, so indexes 3 and 2 are the best two;
+        // energy profile is a timing property and never counts
+        double expected = stats[3] * 0.60 + stats[2] * 0.40;
 
         assertEquals(expected, s.getOverallScore(), 0.011);
     }

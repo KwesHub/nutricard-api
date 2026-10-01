@@ -139,6 +139,13 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
                 "OR micro_breakdown NOT LIKE '%scoreCurve%'");
+        // Fix 13: scoring audit (SCORING_AUDIT.md). Seven foods moved to the correct as-eaten USDA
+        // entry, micronutrients gained shortfall weights, fibre and a 50 kcal floor, protein quality
+        // now scales with protein amount, the overall drops energy. Rescore all; fibre appearing in
+        // micro_breakdown's coverages is the canary.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
+                "OR micro_breakdown NOT LIKE '%\"fibre\":%'");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(

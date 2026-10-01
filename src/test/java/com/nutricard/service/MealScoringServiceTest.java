@@ -253,14 +253,14 @@ class MealScoringServiceTest {
 
     @Test
     void gapsCarryRareFlagAndCadenceAndRareOnesComeFirst() {
-        NutrientAnalysis result = analyse(100, "{\"vitaminC\":1.0,\"iron\":1.0}");
+        NutrientAnalysis result = analyse(100, "{\"vitaminB6\":1.0,\"iron\":1.0}");
 
         NutrientAnalysis.Gap first = result.gaps().get(0);
         NutrientAnalysis.Gap second = result.gaps().get(1);
         assertEquals("iron", first.name());
         assertTrue(first.rare());
         assertEquals("WEEKLY", first.cadence());
-        assertEquals("vitaminC", second.name());
+        assertEquals("vitaminB6", second.name());
         assertFalse(second.rare());
         assertEquals("DAILY", second.cadence());
     }
