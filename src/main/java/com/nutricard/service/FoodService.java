@@ -50,8 +50,10 @@ public class FoodService {
         Map<Long, NutritionScore> scoresByFoodId = nutritionScoreRepository.findAll().stream()
                 .collect(Collectors.toMap(s -> s.getFood().getId(), s -> s));
         return foods.stream()
-                .map(f -> FoodListItem.of(f,
-                        scoringService.deriveBadges(scoresByFoodId.get(f.getId()), f.getName())))
+                .map(f -> {
+                    NutritionScore score = scoresByFoodId.get(f.getId());
+                    return FoodListItem.of(f, scoringService.deriveBadges(score, f.getName()), score);
+                })
                 .toList();
     }
 

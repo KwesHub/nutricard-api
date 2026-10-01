@@ -65,10 +65,11 @@ class ScoringServiceTest {
     }
 
     @Test
-    void micronutrientScoreIsCappedAt100() {
+    void micronutrientScoreSaturatesBelow100() {
         NutritionScore s = score("Mystery food", data(0, 0, 100, 0, 0, 1000, 0, 0));
 
-        assertEquals(100.0, s.getMicronutrientDensity(), 0.001);
+        // one mega-dosed nutrient is a tiny share of 26, so it can't push a food to 100
+        assertTrue(s.getMicronutrientDensity() > 0 && s.getMicronutrientDensity() < 100);
     }
 
     @Test

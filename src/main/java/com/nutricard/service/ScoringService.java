@@ -340,6 +340,13 @@ public class ScoringService {
 
     private static final Nutrient[] NUTRIENTS = Nutrient.values();
 
+    private static final double TOTAL_RARITY_WEIGHT = Arrays.stream(NUTRIENTS).mapToDouble(n -> n.rarity).sum();
+
+    // Curve steepness, a tuning number: a food averaging 10% adequacy across all 26 nutrients per
+    // 100 kcal scores ~63. The old hard cap put 23 of 41 foods at exactly 100; this gives spinach
+    // ~93, a median near 35, and no food at 100.
+    private static final double MICRO_CURVE_K = 0.10;
+
     private static final Set<String> RARE_NUTRIENTS = Arrays.stream(NUTRIENTS)
             .filter(n -> n.rarity >= 1.25)
             .map(n -> n.key)
@@ -401,11 +408,10 @@ public class ScoringService {
         double qualityScore = pdcaas * completeness * 50;
         double proteinQuality = volumeScore + qualityScore;
 
-        // 2. Micronutrient density — RDA coverage per 100 kcal, summed across all tracked nutrients.
+        // 2. Micronutrient density — RDA coverage per 100 kcal across all tracked nutrients.
         // Scoring per 100 kcal (not per 100g) so calorie-dense foods like peanut butter can't game
-        // the formula by volume. Divisor 1.31 calibrated so peanut butter (~588 kcal) scores ~58.8
-        // under the bonus-style rarity weights, and genuinely dense foods (spinach ~23 kcal,
-        // sardines) saturate the 100-cap.
+        // the formula by volume. The weighted average coverage is then passed through a saturating
+        // curve (see MICRO_CURVE_K) so even spinach stays below 100 and foods keep their rank order.
         double kcal = data.energyKcal100g();
         if (kcal <= 0) {
             log.warn("energyKcal missing for '{}' — using 100 kcal fallback for micronutrient density", name);
@@ -423,9 +429,9 @@ public class ScoringService {
             pctRdaPer100g[i] = value / NUTRIENTS[i].rda * 100.0;
         }
 
-        // 1.31 is a tuning number, not derived: it puts peanut butter at about 58.8.
-        // Foods with lots of nutrients per calorie hit the 100 cap easily.
-        double micronutrientDensity = Math.min(weightedCoverageSum / 1.31 * 100 * bioavailability, 100);
+        // Average adequacy per 100 kcal, 0..1 (1 would mean every nutrient fully covered).
+        double meanCoverage = weightedCoverageSum / TOTAL_RARITY_WEIGHT;
+        double micronutrientDensity = 100 * (1 - Math.exp(-meanCoverage * bioavailability / MICRO_CURVE_K));
 
         // 3. Energy profile (NEUTRAL default)
         double energyProfile = calculateEnergyProfile(data, name, TimingContext.NEUTRAL);
@@ -656,6 +662,7 @@ public class ScoringService {
         Arrays.sort(indices, (a, b) -> Double.compare(pctRdaPer100g[b], pctRdaPer100g[a]));
 
         ObjectNode json = MAPPER.createObjectNode();
+        json.put("scoreCurve", "saturating");  // canary for DataSeeder Fix 12
         ArrayNode top = json.putArray("topNutrients");
         for (int rank = 0; rank < 3 && rank < indices.length; rank++) {
             int i = indices[rank];

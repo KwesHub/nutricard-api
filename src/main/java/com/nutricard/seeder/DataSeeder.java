@@ -134,6 +134,11 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE energy_breakdown IS NULL " +
                 "OR energy_breakdown NOT LIKE '%stomachSpeed%'");
+        // Fix 12: micronutrient density moved from a hard 100-cap (23 of 41 foods at 100) to a
+        // saturating curve. The scoreCurve key in micro_breakdown is the canary.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
+                "OR micro_breakdown NOT LIKE '%scoreCurve%'");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
