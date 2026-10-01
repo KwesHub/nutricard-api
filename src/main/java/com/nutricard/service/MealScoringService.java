@@ -195,11 +195,11 @@ public class MealScoringService {
                 n.equals("Sardines") || n.equals("Walnuts") || n.equals("Flaxseed") || n.equals("Chia seeds"));
 
         if (hasOmega3Fish && hasAllium) {
-            synergies.add("Omega-3 + Allicin: anti-inflammatory combination");
+            synergies.add("Omega-3 + garlic: both are studied for lowering inflammation");
         }
 
         if (hasOats && hasVitC) {
-            synergies.add("Vitamin C reduces phytic acid effect in oats — improved mineral absorption");
+            synergies.add("Vitamin C offsets some of the iron-blocking effect of the phytic acid in oats");
         }
 
         if (hasSpinach && hasVitCForIron) {

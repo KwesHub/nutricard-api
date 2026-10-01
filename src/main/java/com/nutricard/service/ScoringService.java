@@ -204,42 +204,42 @@ public class ScoringService {
     // Curated educational one-liners — shown on the food card when present. Not persisted;
     // attached to the response at serve time via getStandoutFact().
     private static final Map<String, String> STANDOUT_FACTS = Map.ofEntries(
-            Map.entry("Brazil nuts", "Just 2 Brazil nuts (~10g) cover your entire daily selenium — one of the hardest nutrients to find anywhere else in the food supply."),
-            Map.entry("Sardines", "Eaten bones-and-all, sardines deliver calcium plus ~3g of EPA+DHA omega-3s per 100g — one of the few foods rich in both."),
+            Map.entry("Brazil nuts", "Two Brazil nuts (about 10g) cover a whole day's selenium, a nutrient few other foods supply in any quantity."),
+            Map.entry("Sardines", "Eaten bones and all, sardines give you calcium and about 1g of EPA and DHA omega-3 per 100g. Few foods are rich in both."),
             Map.entry("Pearl barley", "One of the richest whole-grain sources of beta-glucan, the soluble fibre shown to lower LDL cholesterol."),
             Map.entry("Oats", "Rich in beta-glucan soluble fibre, which feeds gut bacteria and helps blunt blood-sugar spikes."),
             Map.entry("Spinach", "Among the most nutrient-dense low-calorie foods: 100g covers your vitamin K several times over for only ~23 kcal."),
             Map.entry("Garlic", "Crushing garlic and letting it rest ~10 minutes before cooking activates allicin, its key therapeutic compound."),
             Map.entry("Eggs", "One of the best natural sources of choline, a shortfall nutrient critical for brain and liver function."),
-            Map.entry("Kiwi", "Gram for gram, kiwi has more vitamin C than an orange — plus actinidin, an enzyme that aids protein digestion."),
-            Map.entry("Flaxseed", "The richest common source of lignans and plant omega-3 (ALA) — grind it first; whole seeds pass through undigested."),
+            Map.entry("Kiwi", "Gram for gram, kiwi has more vitamin C than an orange. Green kiwi also contains actinidin, an enzyme that helps digest protein."),
+            Map.entry("Flaxseed", "The richest common source of lignans and plant omega-3 (ALA). Buy it milled or grind it: whole seeds pass through undigested."),
             Map.entry("Walnuts", "The only common nut with meaningful plant omega-3 (ALA), plus polyphenols concentrated in the papery skin."),
-            Map.entry("Salmon", "Combines EPA+DHA omega-3s with vitamin D — two of the most under-consumed nutrients — in a single food."),
+            Map.entry("Salmon", "One of the few foods with plenty of both EPA and DHA omega-3 and vitamin D, two nutrients most people fall short on."),
             Map.entry("Greek yogurt", "Straining removes whey and concentrates the protein to roughly double regular yogurt's, with live cultures included."),
-            Map.entry("Broccoli", "A top source of sulforaphane, one of the most-studied phytonutrients — light steaming preserves far more of it than boiling."),
-            Map.entry("Chia seeds", "Absorb up to 10× their weight in water, forming a gel that slows digestion and steadies blood sugar."),
-            Map.entry("Dark chocolate 70%", "One of the highest polyphenol densities of any food — the higher the cacao %, the more polyphenols and the less sugar."),
+            Map.entry("Broccoli", "A top source of sulforaphane, one of the most studied plant compounds. Light steaming keeps far more of it than boiling."),
+            Map.entry("Chia seeds", "Absorb over 20 times their weight in liquid and turn to gel, which slows digestion. Always soak them before eating, never swallow them dry."),
+            Map.entry("Dark chocolate 70%", "One of the most polyphenol-dense foods there is. The higher the cacao percentage, the more polyphenols and the less sugar."),
             Map.entry("Blueberries", "The anthocyanins in the skins are among the most-studied phytonutrients for brain and vascular health."),
-            Map.entry("Sweet potato", "The orange colour is beta-carotene — 100g covers your vitamin A needs; eat it with a little fat to absorb it."),
-            Map.entry("Cottage cheese", "One of the highest-casein foods — a slow-digesting protein, which is why lifters traditionally eat it before bed."),
+            Map.entry("Sweet potato", "The orange colour is beta-carotene. 100g covers most of a day's vitamin A, and eating it with a little fat helps you absorb it."),
+            Map.entry("Cottage cheese", "Mostly casein, a slow-digesting protein, which is why lifters often eat it before bed."),
             Map.entry("Avocado", "Its fat helps you absorb fat-soluble vitamins (A, D, E, K) from other foods eaten in the same meal."),
-            Map.entry("Lemon", "The vitamin C in a squeeze of lemon can roughly triple non-haem iron absorption from plant foods like lentils and spinach.")
+            Map.entry("Lemon", "Vitamin C helps you absorb iron from plant foods, but it takes about 50mg in the meal. A squeeze of lemon gives 3 to 7mg, so add pepper or kiwi to lentils for a real effect.")
     );
 
     // Human explanation for every food carrying an ANTI_NUTRIENT_MAP penalty — why the score
     // is lower than the raw nutrients suggest, and what to do about it.
     private static final Map<String, String> ANTI_NUTRIENT_NOTES = Map.ofEntries(
-            Map.entry("Red kidney beans", "Contain phytates and lectins — thorough cooking neutralises the lectins, and soaking reduces the phytates."),
-            Map.entry("Red lentils", "Phytates bind some of the iron and zinc — soaking, or pairing with vitamin-C foods, improves absorption."),
-            Map.entry("Green lentils", "Phytates bind some of the iron and zinc — soaking, or pairing with vitamin-C foods, improves absorption."),
-            Map.entry("Oats", "Contain phytic acid, which binds minerals — soaking overnight (as in overnight oats) reduces it."),
-            Map.entry("Spinach", "High in oxalates, which bind its own calcium and iron — pair with vitamin-C foods to offset."),
-            Map.entry("Black beans", "Phytates and lectins — well cooked, most are neutralised, and the fibre benefit far outweighs the rest."),
-            Map.entry("Walnuts", "Contain some phytic acid — light toasting or soaking reduces it."),
-            Map.entry("Brazil nuts", "Contain some phytic acid — light toasting or soaking reduces it."),
-            Map.entry("Flaxseed", "Contains phytates and cyanogenic glycosides — harmless at normal intakes of 1–2 tablespoons a day."),
-            Map.entry("Chia seeds", "Contain some phytic acid — negligible at typical serving sizes."),
-            Map.entry("Broccoli", "Raw broccoli contains goitrogens that can interfere with iodine uptake — cooking largely deactivates them.")
+            Map.entry("Red kidney beans", "Contain phytates and lectins. Boiling them hard for 10 minutes destroys the lectins, and soaking reduces the phytates. Tinned beans are already cooked."),
+            Map.entry("Red lentils", "Phytates bind some of the iron and zinc. Soaking helps, and so does eating them with a food high in vitamin C."),
+            Map.entry("Green lentils", "Phytates bind some of the iron and zinc. Soaking helps, and so does eating them with a food high in vitamin C."),
+            Map.entry("Oats", "Contain phytic acid, which binds minerals. Soaking only cuts it with something acidic (yogurt, lemon) or warmth; plain cold overnight oats do little."),
+            Map.entry("Spinach", "High in oxalates, which lock up much of its own calcium and iron. Cooking lowers oxalates; eating it with vitamin C helps the iron."),
+            Map.entry("Black beans", "Contain phytates and lectins. Cooking neutralises the lectins, and the fibre benefit far outweighs the rest."),
+            Map.entry("Walnuts", "Contain some phytic acid. Light toasting or soaking reduces it."),
+            Map.entry("Brazil nuts", "Contain some phytic acid. Light toasting or soaking reduces it."),
+            Map.entry("Flaxseed", "Contains phytates and cyanogenic glycosides, both harmless at normal amounts of 1 to 2 tablespoons a day."),
+            Map.entry("Chia seeds", "Contain some phytic acid, too little to matter at a normal serving."),
+            Map.entry("Broccoli", "Raw broccoli contains goitrogens, which can interfere with iodine uptake in large amounts. Cooking deactivates most of them.")
     );
 
     // Short chip label for the watch badge — one per food in ANTI_NUTRIENT_NOTES. Unlike
@@ -266,7 +266,7 @@ public class ScoringService {
     );
     // No walnut cap: a 2-year RCT (WAHA, 708 adults) found 30-60g/day reduced inflammatory markers.
     private static final Map<String, String> CAP_NOTES = Map.ofEntries(
-            Map.entry("Brazil nuts", "Selenium is so concentrated that more than ~4 nuts a day can exceed the safe upper limit — treat it like a supplement, not a snack. Two nuts already cover your full daily selenium.")
+            Map.entry("Brazil nuts", "Selenium is so concentrated that more than about 4 nuts a day can go over the safe upper limit. Two nuts already cover a full day, so treat them like a supplement, not a snack.")
     );
 
     // A nutrient earns a strength badge when 100g covers at least half its RDA, or 30% for a
@@ -615,7 +615,7 @@ public class ScoringService {
     }
 
     private static final String RARE_BADGE_DETAIL =
-            "A shortfall nutrient — hard to find in most diets, so foods rich in it are worth seeking out.";
+            "A nutrient most diets fall short on, so foods rich in it are worth seeking out.";
 
     // Derived at serve time, never persisted: up to three strength badges from the persisted
     // coverage vector (rare nutrients first — they differentiate foods — then by coverage),

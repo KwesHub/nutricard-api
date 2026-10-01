@@ -191,7 +191,7 @@ class MealScoringServiceTest {
 
     @Test
     void fishWithGarlicIsAnOmega3AllicinSynergy() {
-        assertTrue(synergies(food(1, "Sardines"), food(2, "Garlic")).contains("Omega-3 + Allicin"));
+        assertTrue(synergies(food(1, "Sardines"), food(2, "Garlic")).contains("Omega-3 + garlic"));
     }
 
     @Test
