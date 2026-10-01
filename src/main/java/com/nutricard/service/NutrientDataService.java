@@ -23,6 +23,10 @@ public class NutrientDataService {
     private static final int NUTRIENT_ID_IODINE = 1100;
     private static final int NUTRIENT_ID_EPA = 1278;
     private static final int NUTRIENT_ID_DHA = 1272;
+    // ALA: SR Legacy reports it as 18:3 n-3 (1404) for some foods and only as total 18:3 (1270) for
+    // others (flax, walnuts). In plant foods total 18:3 is essentially all ALA.
+    private static final int NUTRIENT_ID_ALA = 1404;
+    private static final int NUTRIENT_ID_PUFA_18_3 = 1270;
 
     // Every id points at the food as eaten: grains, pasta and pulses cooked, mince cooked.
     // A dry or raw entry inflates every per-100g value about 3x. Check the USDA description
@@ -200,13 +204,17 @@ public class NutrientDataService {
         double iodine = getNutrientValueById(foodNutrients, NUTRIENT_ID_IODINE, nutrientObj, valueField);
         double epa = getNutrientValueById(foodNutrients, NUTRIENT_ID_EPA, nutrientObj, valueField);
         double dha = getNutrientValueById(foodNutrients, NUTRIENT_ID_DHA, nutrientObj, valueField);
+        double ala = getNutrientValueById(foodNutrients, NUTRIENT_ID_ALA, nutrientObj, valueField);
+        if (ala == 0) {
+            ala = getNutrientValueById(foodNutrients, NUTRIENT_ID_PUFA_18_3, nutrientObj, valueField);
+        }
 
         return new NutrientData(proteins, fiber, energyKcal, fat, saturatedFat,
                 sugars, mono, poly,
                 vitaminA, vitaminC, vitaminD, vitaminE, vitaminK,
                 vitaminB1, vitaminB2, vitaminB3, vitaminB6, vitaminB12, folate,
                 calcium, iron, magnesium, phosphorus, potassium, zinc, selenium, copper,
-                choline, pantothenicAcid, biotin, manganese, iodine, epa, dha);
+                choline, pantothenicAcid, biotin, manganese, iodine, epa, dha, ala);
     }
 
     private double getNutrientValue(JsonNode foodNutrients, String nutrientName,
@@ -283,6 +291,7 @@ public class NutrientDataService {
             double manganese,
             double iodine,
             double epa,
-            double dha
+            double dha,
+            double ala
     ) {}
 }

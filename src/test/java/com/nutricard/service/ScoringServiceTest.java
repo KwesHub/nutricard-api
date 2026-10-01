@@ -32,7 +32,7 @@ class ScoringServiceTest {
         return new NutrientData(protein, fibre, kcal, fat, 0, sugars, 0, 0,
                 m, m, m, m, m, m, m, m, m, m, m, m,
                 m, m, m, m, m, m, m, m, m, m, m, m,
-                epa, dha);
+                epa, dha, 0);
     }
 
     private NutritionScore score(String name, NutrientData d) {

@@ -506,7 +506,7 @@ public class ScoringService {
         score.setGutBreakdown(String.format(Locale.ROOT,
                 "{\"fibreG\":%.2f,\"prebioticBonus\":%d,\"probioticBonus\":%d,\"antiNutrientPenalty\":%d,\"omega3Bonus\":%.1f}",
                 data.fiber100g(), prebioticBonus, probioticBonus, antiNutrientPenalty, omega3Bonus));
-        score.setMicroBreakdown(buildMicroBreakdown(pctRdaPer100g));
+        score.setMicroBreakdown(buildMicroBreakdown(pctRdaPer100g, data));
 
         // Timing scores as JSON string
         StringBuilder tsJson = new StringBuilder("{");
@@ -634,6 +634,9 @@ public class ScoringService {
                             ? new Badge(e.getKey(), "rare", RARE_BADGE_DETAIL)
                             : new Badge(e.getKey(), "strength", null)));
         }
+        if (score != null) {
+            badges.addAll(fatBadges(score));
+        }
         String watch = ANTI_NUTRIENT_BADGES.get(foodName);
         if (watch != null) {
             badges.add(new Badge(watch, "watch", ANTI_NUTRIENT_NOTES.get(foodName)));
@@ -660,6 +663,41 @@ public class ScoringService {
         }
     }
 
+    // Fat standouts sit outside the RDA scoring: omega-9 has no RDA (the body makes it) and ALA's
+    // value depends on context, so they are labelled strengths, not scored.
+    private static final double MUFA_BADGE_MIN_G = 5.0;
+    private static final double MUFA_BADGE_MIN_SHARE = 0.40;
+    // and at least twice the saturated fat, so beef (about as much saturated as omega-9) doesn't qualify
+    private static final double MUFA_BADGE_MIN_RATIO_TO_SATURATED = 2.0;
+    private static final double ALA_BADGE_MIN_G = 2.0;
+    private static final String MUFA_BADGE_DETAIL =
+            "Mostly oleic acid (omega-9), the main fat in olive oil. Not essential, since your body makes it, but eating it in place of saturated fat improves blood cholesterol.";
+    private static final String ALA_BADGE_DETAIL =
+            "The plant omega-3, which is essential. Your body turns only about 5 to 10% of it into EPA and DHA, so it doesn't replace oily fish.";
+
+    private List<Badge> fatBadges(NutritionScore score) {
+        if (score.getMicroBreakdown() == null) return List.of();
+        try {
+            JsonNode json = MAPPER.readTree(score.getMicroBreakdown());
+            double fat = json.path("fatG").asDouble(0);
+            double mufa = json.path("monounsaturatedFatG").asDouble(0);
+            double ala = json.path("alaG").asDouble(0);
+            double saturated = json.path("saturatedFatG").asDouble(0);
+            List<Badge> out = new ArrayList<>();
+            if (mufa >= MUFA_BADGE_MIN_G && fat > 0 && mufa / fat >= MUFA_BADGE_MIN_SHARE
+                    && mufa >= saturated * MUFA_BADGE_MIN_RATIO_TO_SATURATED) {
+                out.add(new Badge("Omega-9 fats", "strength", MUFA_BADGE_DETAIL));
+            }
+            if (ala >= ALA_BADGE_MIN_G) {
+                out.add(new Badge("Plant omega-3 (ALA)", "strength", ALA_BADGE_DETAIL));
+            }
+            return out;
+        } catch (Exception e) {
+            log.warn("Could not parse fat profile for score {}: {}", score.getId(), e.getMessage());
+            return List.of();
+        }
+    }
+
     // Parses the coverages map back out of a persisted microBreakdown (%RDA per 100g).
     // Lives here because buildMicroBreakdown() below owns the JSON shape.
     public Map<String, Double> parseCoverages(NutritionScore score) {
@@ -679,13 +717,18 @@ public class ScoringService {
 
     // Built with Jackson rather than String.format: the coverages map is 26 entries, and
     // FoodService.compare() parses this JSON back — hand-rolled formatting isn't worth the risk.
-    private String buildMicroBreakdown(double[] pctRdaPer100g) {
+    private String buildMicroBreakdown(double[] pctRdaPer100g, NutrientData data) {
         Integer[] indices = new Integer[pctRdaPer100g.length];
         for (int i = 0; i < indices.length; i++) indices[i] = i;
         Arrays.sort(indices, (a, b) -> Double.compare(pctRdaPer100g[b], pctRdaPer100g[a]));
 
         ObjectNode json = MAPPER.createObjectNode();
         json.put("scoreCurve", "saturating");  // canary for DataSeeder Fix 12
+        // Fat profile for the fat-standout badges (grams per 100g); alaG is the Fix 15 canary.
+        json.put("fatG", round1(data.fat100g()));
+        json.put("monounsaturatedFatG", round1(data.monounsaturatedFat100g()));
+        json.put("saturatedFatG", round1(data.saturatedFat100g()));
+        json.put("alaG", round1(data.ala()));
         ArrayNode top = json.putArray("topNutrients");
         for (int rank = 0; rank < 3 && rank < indices.length; rank++) {
             int i = indices[rank];

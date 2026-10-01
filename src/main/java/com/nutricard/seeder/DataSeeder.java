@@ -209,6 +209,11 @@ public class DataSeeder implements CommandLineRunner {
         FOOD_GUIDE.forEach((name, guide) -> jdbcTemplate.update(
                 "UPDATE foods SET food_role = ?, frequency = ? WHERE name = ?",
                 guide.role().name(), guide.frequency(), name));
+        // Fix 15: fat profile (fat, monounsaturated, saturated, ALA) added to micro_breakdown for
+        // the omega-9 and plant omega-3 badges. saturatedFatG is the canary.
+        jdbcTemplate.update(
+                "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
+                "OR micro_breakdown NOT LIKE '%\"saturatedFatG\":%'");
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
