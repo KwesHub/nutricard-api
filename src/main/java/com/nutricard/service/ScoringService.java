@@ -262,12 +262,11 @@ public class ScoringService {
     // reduce by soaking/cooking). These are "don't eat more than X" caps, shown as a distinct
     // cap badge with the reason in the popover.
     private static final Map<String, String> CAP_BADGES = Map.ofEntries(
-            Map.entry("Brazil nuts", "Max 2/day"),
-            Map.entry("Walnuts", "Max 15–20g/day")
+            Map.entry("Brazil nuts", "Max 2/day")
     );
+    // No walnut cap: a 2-year RCT (WAHA, 708 adults) found 30-60g/day reduced inflammatory markers.
     private static final Map<String, String> CAP_NOTES = Map.ofEntries(
-            Map.entry("Brazil nuts", "Selenium is so concentrated that more than ~4 nuts a day can exceed the safe upper limit — treat it like a supplement, not a snack. Two nuts already cover your full daily selenium."),
-            Map.entry("Walnuts", "Genuinely good fats, but a high omega-6 load in larger amounts — a 15–20g topping is the sweet spot, not a daily handful.")
+            Map.entry("Brazil nuts", "Selenium is so concentrated that more than ~4 nuts a day can exceed the safe upper limit — treat it like a supplement, not a snack. Two nuts already cover your full daily selenium.")
     );
 
     // A nutrient earns a strength badge when 100g covers at least half its RDA, or 30% for a

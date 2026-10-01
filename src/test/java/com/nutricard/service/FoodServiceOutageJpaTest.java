@@ -48,8 +48,8 @@ class FoodServiceOutageJpaTest {
 
     @Test
     void foodWithAFallbackStillGetsACardButNothingIsSaved() {
-        // Garlic is PANTRY, so this also runs the detach line on a score that was never saved
-        Food garlic = saveFood("Garlic", FoodRole.PANTRY);
+        // Garlic is FLAVOUR, so this also runs the detach line on a score that was never saved
+        Food garlic = saveFood("Garlic", FoodRole.FLAVOUR);
 
         FoodCardResponse card = foodService.getCard(garlic.getId());
 
@@ -61,7 +61,7 @@ class FoodServiceOutageJpaTest {
 
     @Test
     void foodWithNoFallbackIsA503AndNothingIsSaved() {
-        Food eggs = saveFood("Eggs", FoodRole.DAILY_DRIVER);
+        Food eggs = saveFood("Eggs", FoodRole.BASE);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> foodService.getCard(eggs.getId()));

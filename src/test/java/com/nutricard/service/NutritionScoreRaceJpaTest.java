@@ -68,7 +68,7 @@ class NutritionScoreRaceJpaTest {
         f.setName(name);
         f.setCategory("OTHER");
         f.setServingSizeG(100);
-        f.setFoodRole(FoodRole.DAILY_DRIVER);
+        f.setFoodRole(FoodRole.BASE);
         return foods.save(f);
     }
 

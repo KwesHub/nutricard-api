@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -55,6 +56,55 @@ public class DataSeeder implements CommandLineRunner {
         warmup.setDaemon(true);
         warmup.start();
     }
+
+    // Role on the plate and how often to eat it, one row per food. Frequencies carry their direction:
+    // "At least 2× a week" is a minimum (oily fish: UK advice is at least two portions of fish a week),
+    // "Up to 3× a week" a ceiling (red meat), "Max 2 a day" a hard cap (Brazil nuts, selenium).
+    private record Guide(FoodRole role, String frequency) {}
+
+    private static final Map<String, Guide> FOOD_GUIDE = Map.ofEntries(
+            Map.entry("Sardines", new Guide(FoodRole.PROTEIN, "At least 2× a week")),
+            Map.entry("Oats", new Guide(FoodRole.BASE, "Daily")),
+            Map.entry("Garlic", new Guide(FoodRole.FLAVOUR, "Daily, in cooking")),
+            Map.entry("Eggs", new Guide(FoodRole.PROTEIN, "Daily")),
+            Map.entry("Chicken breast", new Guide(FoodRole.PROTEIN, "Most days")),
+            Map.entry("Beef mince 10%", new Guide(FoodRole.PROTEIN, "Up to 3× a week")),
+            Map.entry("Sweet potato", new Guide(FoodRole.BASE, "Most days")),
+            Map.entry("Brown rice", new Guide(FoodRole.BASE, "Most days")),
+            Map.entry("White rice", new Guide(FoodRole.BASE, "Most days")),
+            Map.entry("Pearl barley", new Guide(FoodRole.BASE, "Most days")),
+            Map.entry("Whole-wheat spaghetti", new Guide(FoodRole.BASE, "Most days")),
+            Map.entry("Red lentils", new Guide(FoodRole.BASE, "Daily")),
+            Map.entry("Green lentils", new Guide(FoodRole.BASE, "Daily")),
+            Map.entry("Red kidney beans", new Guide(FoodRole.BASE, "Daily")),
+            Map.entry("Peas", new Guide(FoodRole.VEG_FRUIT, "Most days")),
+            Map.entry("Spinach", new Guide(FoodRole.VEG_FRUIT, "Daily")),
+            Map.entry("Apple", new Guide(FoodRole.VEG_FRUIT, "Daily")),
+            Map.entry("Banana", new Guide(FoodRole.VEG_FRUIT, "Daily")),
+            Map.entry("Kiwi", new Guide(FoodRole.VEG_FRUIT, "Daily")),
+            Map.entry("Blueberries", new Guide(FoodRole.VEG_FRUIT, "Daily")),
+            Map.entry("Ginger", new Guide(FoodRole.FLAVOUR, "Daily, in cooking")),
+            Map.entry("Honey", new Guide(FoodRole.TREAT, "Now and then")),
+            Map.entry("Peanut butter", new Guide(FoodRole.BOOSTER, "Daily, 1–2 tbsp")),
+            Map.entry("Tahini", new Guide(FoodRole.FLAVOUR, "In cooking, about 1 tbsp")),
+            Map.entry("Olive oil", new Guide(FoodRole.FLAVOUR, "Daily, in cooking")),
+            Map.entry("Dark chocolate 70%", new Guide(FoodRole.TREAT, "Now and then")),
+            Map.entry("Salmon", new Guide(FoodRole.PROTEIN, "At least 2× a week")),
+            Map.entry("Greek yogurt", new Guide(FoodRole.PROTEIN, "Daily")),
+            Map.entry("Broccoli", new Guide(FoodRole.VEG_FRUIT, "Most days")),
+            Map.entry("Avocado", new Guide(FoodRole.VEG_FRUIT, "Most days")),
+            Map.entry("Quinoa", new Guide(FoodRole.BASE, "Most days")),
+            Map.entry("Black beans", new Guide(FoodRole.BASE, "Daily")),
+            Map.entry("Walnuts", new Guide(FoodRole.BOOSTER, "Daily, a small handful")),
+            Map.entry("Cottage cheese", new Guide(FoodRole.PROTEIN, "Most days")),
+            Map.entry("Lemon", new Guide(FoodRole.FLAVOUR, "Daily, in cooking")),
+            Map.entry("Flaxseed", new Guide(FoodRole.BOOSTER, "Daily, 1–2 tbsp milled")),
+            Map.entry("Chia seeds", new Guide(FoodRole.BOOSTER, "Daily, 1 tbsp soaked")),
+            Map.entry("Sweet corn", new Guide(FoodRole.VEG_FRUIT, "Most days")),
+            Map.entry("Bell pepper", new Guide(FoodRole.VEG_FRUIT, "Most days")),
+            Map.entry("Tomato", new Guide(FoodRole.VEG_FRUIT, "Daily")),
+            Map.entry("Brazil nuts", new Guide(FoodRole.BOOSTER, "Max 2 a day"))
+    );
 
     private void applyMigrations() {
         // Fix 1: White rice was seeded as PANTRY; correct the role
@@ -146,6 +196,15 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.update(
                 "DELETE FROM nutrition_scores WHERE micro_breakdown IS NULL " +
                 "OR micro_breakdown NOT LIKE '%\"fibre\":%'");
+        // Fix 14: roles split into role on the plate (BASE, PROTEIN, VEG_FRUIT, BOOSTER, FLAVOUR,
+        // TREAT) and a separate frequency. Hibernate created a CHECK constraint listing the old enum
+        // values, so drop it first. Sets every food from FOOD_GUIDE by name; idempotent. Scores don't
+        // depend on role, so nothing is rescored.
+        jdbcTemplate.execute("ALTER TABLE foods DROP CONSTRAINT IF EXISTS foods_food_role_check");
+        jdbcTemplate.execute("ALTER TABLE foods ADD COLUMN IF NOT EXISTS frequency VARCHAR(255)");
+        FOOD_GUIDE.forEach((name, guide) -> jdbcTemplate.update(
+                "UPDATE foods SET food_role = ?, frequency = ? WHERE name = ?",
+                guide.role().name(), guide.frequency(), name));
         // Sync sequences past current max IDs so seedMissingFoods() inserts don't get
         // duplicate-key errors when the sequence drifted out of sync with existing rows.
         jdbcTemplate.execute(
@@ -160,47 +219,47 @@ public class DataSeeder implements CommandLineRunner {
         jdbcTemplate.execute("ALTER SEQUENCE nutrition_scores_id_seq RESTART WITH 1");
 
         List<Food> foods = new ArrayList<>();
-        foods.add(createFood("Sardines", "FISH", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Oats", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Garlic", "VEGETABLE", FoodRole.PANTRY, 10));
-        foods.add(createFood("Eggs", "PROTEIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Chicken breast", "PROTEIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Beef mince 10%", "PROTEIN", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Sweet potato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Brown rice", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("White rice", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Pearl barley", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Whole-wheat spaghetti", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Red lentils", "LEGUME", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Green lentils", "LEGUME", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Red kidney beans", "LEGUME", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Peas", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Spinach", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Apple", "FRUIT", FoodRole.BOOSTER, 100));
-        foods.add(createFood("Banana", "FRUIT", FoodRole.BOOSTER, 100));
-        foods.add(createFood("Kiwi", "FRUIT", FoodRole.BOOSTER, 100));
-        foods.add(createFood("Blueberries", "FRUIT", FoodRole.BOOSTER, 100));
-        foods.add(createFood("Ginger", "VEGETABLE", FoodRole.BOOSTER, 10));
-        foods.add(createFood("Honey", "OTHER", FoodRole.OCCASIONAL, 20));
-        foods.add(createFood("Peanut butter", "OTHER", FoodRole.BOOSTER, 30));
-        foods.add(createFood("Tahini", "OTHER", FoodRole.PANTRY, 15));
-        foods.add(createFood("Olive oil", "OTHER", FoodRole.PANTRY, 15));
-        foods.add(createFood("Dark chocolate 70%", "OTHER", FoodRole.OCCASIONAL, 30));
-        foods.add(createFood("Salmon", "FISH", FoodRole.WEEKLY_ANCHOR, 100));
-        foods.add(createFood("Greek yogurt", "DAIRY", FoodRole.DAILY_DRIVER, 150));
-        foods.add(createFood("Broccoli", "VEGETABLE", FoodRole.DAILY_DRIVER, 80));
-        foods.add(createFood("Avocado", "FRUIT", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Quinoa", "GRAIN", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Black beans", "LEGUME", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Walnuts", "NUT", FoodRole.BOOSTER, 30));
-        foods.add(createFood("Cottage cheese", "DAIRY", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Lemon", "FRUIT", FoodRole.PANTRY, 15));
-        foods.add(createFood("Flaxseed", "SEED", FoodRole.BOOSTER, 15));
-        foods.add(createFood("Chia seeds", "SEED", FoodRole.BOOSTER, 15));
-        foods.add(createFood("Sweet corn", "VEGETABLE", FoodRole.DAILY_DRIVER, 80));
-        foods.add(createFood("Bell pepper", "VEGETABLE", FoodRole.DAILY_DRIVER, 80));
-        foods.add(createFood("Tomato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100));
-        foods.add(createFood("Brazil nuts", "NUT", FoodRole.BOOSTER, 10));
+        foods.add(createFood("Sardines", "FISH", 100));
+        foods.add(createFood("Oats", "GRAIN", 100));
+        foods.add(createFood("Garlic", "VEGETABLE", 10));
+        foods.add(createFood("Eggs", "PROTEIN", 100));
+        foods.add(createFood("Chicken breast", "PROTEIN", 100));
+        foods.add(createFood("Beef mince 10%", "PROTEIN", 100));
+        foods.add(createFood("Sweet potato", "VEGETABLE", 100));
+        foods.add(createFood("Brown rice", "GRAIN", 100));
+        foods.add(createFood("White rice", "GRAIN", 100));
+        foods.add(createFood("Pearl barley", "GRAIN", 100));
+        foods.add(createFood("Whole-wheat spaghetti", "GRAIN", 100));
+        foods.add(createFood("Red lentils", "LEGUME", 100));
+        foods.add(createFood("Green lentils", "LEGUME", 100));
+        foods.add(createFood("Red kidney beans", "LEGUME", 100));
+        foods.add(createFood("Peas", "VEGETABLE", 100));
+        foods.add(createFood("Spinach", "VEGETABLE", 100));
+        foods.add(createFood("Apple", "FRUIT", 100));
+        foods.add(createFood("Banana", "FRUIT", 100));
+        foods.add(createFood("Kiwi", "FRUIT", 100));
+        foods.add(createFood("Blueberries", "FRUIT", 100));
+        foods.add(createFood("Ginger", "VEGETABLE", 10));
+        foods.add(createFood("Honey", "OTHER", 20));
+        foods.add(createFood("Peanut butter", "OTHER", 30));
+        foods.add(createFood("Tahini", "OTHER", 15));
+        foods.add(createFood("Olive oil", "OTHER", 15));
+        foods.add(createFood("Dark chocolate 70%", "OTHER", 30));
+        foods.add(createFood("Salmon", "FISH", 100));
+        foods.add(createFood("Greek yogurt", "DAIRY", 150));
+        foods.add(createFood("Broccoli", "VEGETABLE", 80));
+        foods.add(createFood("Avocado", "FRUIT", 100));
+        foods.add(createFood("Quinoa", "GRAIN", 100));
+        foods.add(createFood("Black beans", "LEGUME", 100));
+        foods.add(createFood("Walnuts", "NUT", 30));
+        foods.add(createFood("Cottage cheese", "DAIRY", 100));
+        foods.add(createFood("Lemon", "FRUIT", 15));
+        foods.add(createFood("Flaxseed", "SEED", 15));
+        foods.add(createFood("Chia seeds", "SEED", 15));
+        foods.add(createFood("Sweet corn", "VEGETABLE", 80));
+        foods.add(createFood("Bell pepper", "VEGETABLE", 80));
+        foods.add(createFood("Tomato", "VEGETABLE", 100));
+        foods.add(createFood("Brazil nuts", "NUT", 10));
 
         for (Food food : foods) {
             nutritionScoreService.computeIfMissing(food);
@@ -208,37 +267,42 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedMissingFoods() {
-        seedFoodIfMissing("Salmon", "FISH", FoodRole.WEEKLY_ANCHOR, 100);
-        seedFoodIfMissing("Greek yogurt", "DAIRY", FoodRole.DAILY_DRIVER, 150);
-        seedFoodIfMissing("Broccoli", "VEGETABLE", FoodRole.DAILY_DRIVER, 80);
-        seedFoodIfMissing("Avocado", "FRUIT", FoodRole.DAILY_DRIVER, 100);
-        seedFoodIfMissing("Quinoa", "GRAIN", FoodRole.DAILY_DRIVER, 100);
-        seedFoodIfMissing("Black beans", "LEGUME", FoodRole.DAILY_DRIVER, 100);
-        seedFoodIfMissing("Walnuts", "NUT", FoodRole.BOOSTER, 30);
-        seedFoodIfMissing("Cottage cheese", "DAIRY", FoodRole.DAILY_DRIVER, 100);
-        seedFoodIfMissing("Lemon", "FRUIT", FoodRole.PANTRY, 15);
-        seedFoodIfMissing("Flaxseed", "SEED", FoodRole.BOOSTER, 15);
-        seedFoodIfMissing("Chia seeds", "SEED", FoodRole.BOOSTER, 15);
-        seedFoodIfMissing("Sweet corn", "VEGETABLE", FoodRole.DAILY_DRIVER, 80);
-        seedFoodIfMissing("Bell pepper", "VEGETABLE", FoodRole.DAILY_DRIVER, 80);
-        seedFoodIfMissing("Tomato", "VEGETABLE", FoodRole.DAILY_DRIVER, 100);
-        seedFoodIfMissing("Brazil nuts", "NUT", FoodRole.BOOSTER, 10);
+        seedFoodIfMissing("Salmon", "FISH", 100);
+        seedFoodIfMissing("Greek yogurt", "DAIRY", 150);
+        seedFoodIfMissing("Broccoli", "VEGETABLE", 80);
+        seedFoodIfMissing("Avocado", "FRUIT", 100);
+        seedFoodIfMissing("Quinoa", "GRAIN", 100);
+        seedFoodIfMissing("Black beans", "LEGUME", 100);
+        seedFoodIfMissing("Walnuts", "NUT", 30);
+        seedFoodIfMissing("Cottage cheese", "DAIRY", 100);
+        seedFoodIfMissing("Lemon", "FRUIT", 15);
+        seedFoodIfMissing("Flaxseed", "SEED", 15);
+        seedFoodIfMissing("Chia seeds", "SEED", 15);
+        seedFoodIfMissing("Sweet corn", "VEGETABLE", 80);
+        seedFoodIfMissing("Bell pepper", "VEGETABLE", 80);
+        seedFoodIfMissing("Tomato", "VEGETABLE", 100);
+        seedFoodIfMissing("Brazil nuts", "NUT", 10);
     }
 
-    private void seedFoodIfMissing(String name, String category, FoodRole role, int servingSizeG) {
+    private void seedFoodIfMissing(String name, String category, int servingSizeG) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM foods WHERE name = ?", Integer.class, name);
         if (count == null || count == 0) {
-            Food food = createFood(name, category, role, servingSizeG);
+            Food food = createFood(name, category, servingSizeG);
             nutritionScoreService.computeIfMissing(food);
         }
     }
 
-    private Food createFood(String name, String category, FoodRole role, int servingSizeG) {
+    private Food createFood(String name, String category, int servingSizeG) {
+        Guide guide = FOOD_GUIDE.get(name);
+        if (guide == null) {
+            throw new IllegalStateException("No FOOD_GUIDE entry for seeded food '" + name + "'");
+        }
         Food food = new Food();
         food.setName(name);
         food.setCategory(category);
-        food.setFoodRole(role);
+        food.setFoodRole(guide.role());
+        food.setFrequency(guide.frequency());
         food.setServingSizeG(servingSizeG);
         return foodRepository.save(food);
     }

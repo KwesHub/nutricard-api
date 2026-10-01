@@ -60,7 +60,7 @@ class FoodServiceJpaTest {
 
     @Test
     void pantryCardHidesTimingScoresWithoutWipingThemFromTheDatabase() {
-        Food garlic = saveFood("Garlic", FoodRole.PANTRY);
+        Food garlic = saveFood("Garlic", FoodRole.FLAVOUR);
         NutritionScore saved = saveScore(garlic);
         em.flush();
         em.clear();
@@ -78,7 +78,7 @@ class FoodServiceJpaTest {
 
     @Test
     void nonPantryCardKeepsItsTimingScores() {
-        Food oats = saveFood("Oats", FoodRole.DAILY_DRIVER);
+        Food oats = saveFood("Oats", FoodRole.BASE);
         saveScore(oats);
         em.flush();
         em.clear();
@@ -92,9 +92,9 @@ class FoodServiceJpaTest {
 
     @Test
     void findByFoodIdInReturnsOnlyTheRequestedFoods() {
-        Food a = saveFood("A", FoodRole.DAILY_DRIVER);
-        Food b = saveFood("B", FoodRole.DAILY_DRIVER);
-        Food c = saveFood("C", FoodRole.DAILY_DRIVER);
+        Food a = saveFood("A", FoodRole.BASE);
+        Food b = saveFood("B", FoodRole.BASE);
+        Food c = saveFood("C", FoodRole.BASE);
         saveScore(a);
         saveScore(b);
         saveScore(c);

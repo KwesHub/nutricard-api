@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +50,10 @@ public class FoodService {
         // computed yet (mid warm-up) simply get no badges.
         Map<Long, NutritionScore> scoresByFoodId = nutritionScoreRepository.findAll().stream()
                 .collect(Collectors.toMap(s -> s.getFood().getId(), s -> s));
+        // Explicit order: without it Postgres returns rows in physical order, which changes
+        // whenever rows are updated (a migration reshuffled the grid once).
         return foods.stream()
+                .sorted(Comparator.comparing(Food::getId))
                 .map(f -> {
                     NutritionScore score = scoresByFoodId.get(f.getId());
                     return FoodListItem.of(f, scoringService.deriveBadges(score, f.getName()), score);
@@ -64,7 +68,7 @@ public class FoodService {
 
         NutritionScore score = nutritionScoreService.getOrCompute(food);
 
-        if (food.getFoodRole() == FoodRole.PANTRY || food.getFoodRole() == FoodRole.OCCASIONAL) {
+        if (food.getFoodRole() == FoodRole.FLAVOUR || food.getFoodRole() == FoodRole.TREAT) {
             // Response-only null: detach first, or JPA dirty checking flushes the null to the
             // DB and permanently wipes timing_scores (which meal timing scoring depends on).
             entityManager.detach(score);
