@@ -9,8 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-// Controller just routes: request in, call FoodService, response out.
-// Keeping the logic in the service is the separation of concerns bit.
+// Routing only: each endpoint delegates to FoodService, which holds the logic.
 @RestController
 @RequestMapping("/foods")
 @RequiredArgsConstructor

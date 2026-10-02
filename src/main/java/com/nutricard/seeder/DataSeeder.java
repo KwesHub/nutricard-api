@@ -63,7 +63,7 @@ public class DataSeeder implements CommandLineRunner {
     // two portions a week, one oily: a minimum), NHS red meat advice (70g a day or less: a ceiling),
     // no NHS limit on eggs, NHS free sugars (honey counts), EFSA selenium upper limit (Brazil nuts),
     // and standard portions for nuts, seeds and oils (about 30g; 1 tbsp). Flax must be milled to be
-    // digested and chia soaked (choking risk), per the owner's notes.
+    // digested and chia soaked (choking risk).
     private record Guide(FoodRole role, String frequency) {}
 
     private static final Map<String, Guide> FOOD_GUIDE = Map.ofEntries(

@@ -262,12 +262,12 @@ public class ScoringService {
     // (salmon: protein and micronutrients; oats: gut and phytonutrients), so a third stat would
     // mark them down for something they aren't for. Energy profile is left out: it says when a
     // food suits you (it drives the timing grades), not how good the food is. Best two agreed
-    // with the owner's own food rankings better than best three (+0.52 vs +0.40, SCORING_AUDIT.md).
+    // with a hand-made ranking of the 41 foods better than best three (+0.52 vs +0.40, SCORING_AUDIT.md).
     private static final double[] OVERALL_STAT_WEIGHTS = {0.60, 0.40};
 
     // --- Two-axis "fuel" model (gastric-emptying, not glycaemic index) ---
     // The energy/timing score places a food in a 2D space and measures how close it sits to
-    // each context's ideal quadrant (from the owner's Carbmaxxing Fuel Identification matrix):
+    // each context's ideal quadrant (from the fuel identification matrix in the Carbmaxxing notes):
     //   stomachSpeed — how fast it leaves the stomach. Fat, fibre and protein are "brakes"
     //                  that slow emptying; 1 = empties fast (rice, banana), 0 = sits heavy.
     //   bloodSpeed   — how fast glucose hits the blood, proxied by GI. 1 = spike, 0 = trickle.
@@ -347,7 +347,7 @@ public class ScoringService {
 
     // Foods under 50 kcal per 100g are scored as if they had 50. Without it, scaling to 100 kcal
     // multiplied a tomato's modest vitamin C (15% per 100g) by 5.5 and put it above eggs. Tested
-    // against the owner's own food rankings: same agreement as the plain per-kcal score (+0.48),
+    // against a hand-made ranking of the 41 foods: same agreement as the plain per-kcal score (+0.48),
     // where blending in per-100g amounts made it worse (+0.35). See SCORING_AUDIT.md.
     private static final double MICRO_KCAL_FLOOR = 50.0;
 
